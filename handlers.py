@@ -1,0 +1,50 @@
+from aiogram import Router, F
+from aiogram.types import Message, CallbackQuery
+from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+
+from states import NewsForm
+from keyboards import skip_keyboard, anonymous_keyboard
+
+router = Router()
+
+
+@router.message(Command("start"))
+async def start(message: Message, state: FSMContext):
+    await state.set_state(NewsForm.текст)
+    await message.answer(
+        "Привет! Отправьте вашу новость.\n\n"
+        "Можно написать текст или нажать «Пропустить».",
+        reply_markup=skip_keyboard()
+    )
+
+
+@router.message(NewsForm.текст)
+async def get_text(message: Message, state: FSMContext):
+    if message.text == "Пропустить":
+        await state.update_data(текст="Без текста")
+    else:
+        await state.update_data(текст=message.text)
+
+    await state.set_state(NewsForm.анонимный)
+
+    await message.answer(
+        "Как опубликовать новость?",
+        reply_markup=anonymous_keyboard()
+    )
+
+
+@router.callback_query(NewsForm.анонимный)
+async def get_anonymous(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+
+    if callback.data == "anon_yes":
+        author = "Анонимно"
+    else:
+        author = "С указанием автора"
+
+    await callback.message.answer(
+        "Заявка принята и отправлена на проверку."
+    )
+
+    await state.clear()
