@@ -5,26 +5,18 @@ from aiogram.types import (
     InlineKeyboardButton,
 )
 
-start_kb = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text="📰 Отправить новость")]
-    ],
+# Клавиатура для пропуска текста
+skip_keyboard = ReplyKeyboardMarkup(
+    keyboard=[[KeyboardButton(text="Пропустить")]],
     resize_keyboard=True
 )
 
-anon_kb = InlineKeyboardMarkup(
+# Клавиатура для выбора анонимности (инлайн)
+anonymous_keyboard = InlineKeyboardMarkup(
     inline_keyboard=[
         [
-            InlineKeyboardButton(
-                text="🕵️ Анонимно",
-                callback_data="anon_yes"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text="👤 С именем",
-                callback_data="anon_no"
-            )
+            InlineKeyboardButton(text="Анонимно", callback_data="anon_yes"),
+            InlineKeyboardButton(text="С именем", callback_data="anon_no")
         ]
     ]
 )
