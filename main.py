@@ -1,18 +1,22 @@
 import asyncio
+import os
 from aiogram import Bot, Dispatcher
-from config import BOT_TOKEN
+from aiogram.fsm.storage.memory import MemoryStorage
+from handlers import router  # если ваш роутер импортируется из handlers
 
-from handlers import router
+TOKEN = os.getenv("BOT_TOKEN")
+if not TOKEN:
+    raise ValueError("BOT_TOKEN not set")
+
+bot = Bot(token=TOKEN)
+dp = Dispatcher(storage=MemoryStorage())
+dp.include_router(router)
 
 async def main():
-    bot = Bot(token=BOT_TOKEN)
-    dp = Dispatcher()
-
-    dp.include_router(router)
-
-    print("Бот запущен")
-
+    # Удаляем вебхук, чтобы использовать polling
+    await bot.delete_webhook()
+    # Запускаем polling
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(main()) 
