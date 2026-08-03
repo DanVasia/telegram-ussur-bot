@@ -8,16 +8,14 @@ from keyboards import skip_keyboard, anonymous_keyboard
 
 router = Router()
 
-
 @router.message(Command("start"))
 async def start(message: Message, state: FSMContext):
     await state.set_state(NewsForm.текст)
     await message.answer(
         "Привет! Отправьте вашу новость.\n\n"
-        "Можно написать текст или нажать «Пропустить».",
-        reply_markup=skip_keyboard()
+        "Можно написать текст или нажать «Пропустить»",
+        reply_markup=skip_keyboard  # <-- передаём объект, не вызывая ()
     )
-
 
 @router.message(NewsForm.текст)
 async def get_text(message: Message, state: FSMContext):
@@ -27,24 +25,22 @@ async def get_text(message: Message, state: FSMContext):
         await state.update_data(текст=message.text)
 
     await state.set_state(NewsForm.анонимный)
-
     await message.answer(
         "Как опубликовать новость?",
-        reply_markup=anonymous_keyboard()
+        reply_markup=anonymous_keyboard  # <-- передаём объект, не вызывая ()
     )
-
 
 @router.callback_query(NewsForm.анонимный)
 async def get_anonymous(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
+    data = await state.get_data()  # <-- получаем данные внутри функции
 
     if callback.data == "anon_yes":
-        author = "Анонимно"
+        author = "Аноним"
     else:
         author = "С указанием автора"
 
     await callback.message.answer(
-        "Заявка принята и отправлена на проверку."
+        f"Заявка принята.\nАвтор: {author}\nТекст: {data.get('текст', '')}"
     )
-
     await state.clear()
+    await callback.answer()
