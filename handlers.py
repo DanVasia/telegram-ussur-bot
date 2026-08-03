@@ -10,27 +10,27 @@ router = Router()
 
 @router.message(Command("start"))
 async def start(message: Message, state: FSMContext):
-    await state.set_state(NewsForm.текст)          # <-- кириллица
+    await state.set_state(NewsForm.текст)
     await message.answer(
         "Привет! Отправьте вашу новость.\n\n"
         "Можно написать текст или нажать «Пропустить»",
         reply_markup=skip_keyboard
     )
 
-@router.message(NewsForm.текст)                    # <-- кириллица
+@router.message(NewsForm.текст)
 async def get_text(message: Message, state: FSMContext):
     if message.text == "Пропустить":
         await state.update_data(текст="Без текста")
     else:
         await state.update_data(текст=message.text)
 
-    await state.set_state(NewsForm.анонимный)      # <-- кириллица
+    await state.set_state(NewsForm.анонимный)
     await message.answer(
         "Как опубликовать новость?",
         reply_markup=anonymous_keyboard
     )
 
-@router.callback_query(NewsForm.анонимный)         # <-- кириллица
+@router.callback_query(NewsForm.анонимный)
 async def get_anonymous(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     author = "Аноним" if callback.data == "anon_yes" else "С указанием автора"
