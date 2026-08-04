@@ -1,7 +1,7 @@
-import asyncio
 import os
+import logging
 from aiohttp import web
-from aiogram import Bot, Dispatcher
+from aiogram import Bot, Dispatcher, types
 from aiogram.fsm.storage.memory import MemoryStorage
 from handlers import router
 
@@ -13,21 +13,30 @@ bot = Bot(token=TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 dp.include_router(router)
 
-async def health_check(request):
-    return web.Response(text="OK")
+WEBHOOK_URL = "https://telegram-ussur-bot.onrender.com/webhook"
 
-async def start_bot():
-    await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot, drop_pending_updates=True)
+async def webhook(request):
+    data = await request.json()
+    update = types.Update(**data)
+    await dp.process_update(update)
+    return web.Response()
 
-async def main():
+async def on_startup(app):
+    # Устанавливаем вебхук при старте
+    await bot.set_webhook(WEBHOOK_URL, drop_pending_updates=True)
+
+async def on_shutdown(app):
+    # Удаляем вебхук при остановке
+    await bot.delete_webhook()
+
+def main():
     app = web.Application()
-    app.router.add_get("/", health_check)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
-    await site.start()
-    await start_bot()
+    app.router.add_post("/webhook", webhook)
+    app.on_startup.append(on_startup)
+    app.on_shutdown.append(on_shutdown)
+    # Запускаем сервер на порту 10000 (или PORT из окружения)
+    port = int(os.environ.get("PORT", 10000))
+    web.run_app(app, host="0.0.0.0", port=port)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
