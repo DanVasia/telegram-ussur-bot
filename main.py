@@ -17,20 +17,16 @@ async def health_check(request):
     return web.Response(text="OK")
 
 async def start_bot():
-    # Удаляем вебхук и запускаем polling
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot, drop_pending_updates=True)
 
 async def main():
-    # Запускаем веб-сервер (для Render)
     app = web.Application()
-    app.router.add_get("/", health_check)   # эндпоинт для проверки
+    app.router.add_get("/", health_check)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
     await site.start()
-
-    # Запускаем бота параллельно
     await start_bot()
 
 if __name__ == "__main__":
