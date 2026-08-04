@@ -20,13 +20,15 @@ async def health_check(request):
     return web.Response(text="OK")
 
 async def start_bot():
-    # Удаляем вебхук, чтобы использовать polling
+    # Закрываем старые сессии и удаляем вебхук
+    await bot.session.close()
     await bot.delete_webhook(drop_pending_updates=True)
     logging.info("Webhook deleted, starting polling...")
+    # Пробуем запустить polling с автоматическими повторными попытками
     await dp.start_polling(bot, drop_pending_updates=True)
 
 async def main():
-    # Запускаем веб-сервер для Health Check (чтобы Render видел порт)
+    # Запускаем веб-сервер для Health Check (порт 10000)
     app = web.Application()
     app.router.add_get("/", health_check)
     runner = web.AppRunner(app)
@@ -35,7 +37,7 @@ async def main():
     await site.start()
     logging.info("Health check server running on port 10000")
 
-    # Запускаем polling (этот вызов блокирующий)
+    # Запускаем бота с повторными попытками
     await start_bot()
 
 if __name__ == "__main__":
