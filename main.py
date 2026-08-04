@@ -5,6 +5,9 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.fsm.storage.memory import MemoryStorage
 from handlers import router
 
+# Включаем логирование, чтобы видеть запросы
+logging.basicConfig(level=logging.INFO)
+
 TOKEN = os.getenv("BOT_TOKEN")
 if not TOKEN:
     raise ValueError("BOT_TOKEN not set")
@@ -16,17 +19,19 @@ dp.include_router(router)
 WEBHOOK_URL = "https://telegram-ussur-bot.onrender.com/webhook"
 
 async def webhook(request):
+    logging.info("Webhook received")  # Будет видно в логах
     data = await request.json()
     update = types.Update(**data)
-    await dp.process_update(update)
+    await dp.feed_update(bot, update)  # <-- исправлено
     return web.Response()
 
 async def on_startup(app):
-    # Устанавливаем вебхук при старте
+    logging.info("Setting webhook...")
     await bot.set_webhook(WEBHOOK_URL, drop_pending_updates=True)
+    logging.info("Webhook set successfully")
 
 async def on_shutdown(app):
-    # Удаляем вебхук при остановке
+    logging.info("Deleting webhook...")
     await bot.delete_webhook()
 
 def main():
@@ -34,7 +39,6 @@ def main():
     app.router.add_post("/webhook", webhook)
     app.on_startup.append(on_startup)
     app.on_shutdown.append(on_shutdown)
-    # Запускаем сервер на порту 10000 (или PORT из окружения)
     port = int(os.environ.get("PORT", 10000))
     web.run_app(app, host="0.0.0.0", port=port)
 
