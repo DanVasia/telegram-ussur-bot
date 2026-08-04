@@ -5,13 +5,11 @@ from aiogram.types import (
     InlineKeyboardButton,
 )
 
-# Кнопка "Пропустить" – общая для всех полей
 skip_keyboard = ReplyKeyboardMarkup(
     keyboard=[[KeyboardButton(text="Пропустить")]],
     resize_keyboard=True
 )
 
-# Клавиатура для выбора анонимности (инлайн)
 anonymous_keyboard = InlineKeyboardMarkup(
     inline_keyboard=[
         [
@@ -21,7 +19,6 @@ anonymous_keyboard = InlineKeyboardMarkup(
     ]
 )
 
-# Клавиатура для администратора (после модерации)
 admin_keyboard = InlineKeyboardMarkup(
     inline_keyboard=[
         [
