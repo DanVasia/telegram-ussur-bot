@@ -20,15 +20,23 @@ async def health_check(request):
     return web.Response(text="OK")
 
 async def start_bot():
-    # Устанавливаем команды для отображения в меню
+    # Устанавливаем команды для меню
     await bot.set_my_commands([
         types.BotCommand(command="start", description="🔄 Запустить бота")
     ])
-    logging.info("Commands set successfully")
-    # Удаляем вебхук и запускаем polling
+    logging.info("Commands set")
+
+    # Удаляем вебхук и сбрасываем обновления
     await bot.delete_webhook(drop_pending_updates=True)
-    logging.info("Webhook deleted, starting polling...")
-    await dp.start_polling(bot, drop_pending_updates=True)
+    logging.info("Webhook deleted")
+
+    # Запускаем polling с автоматическими повторными попытками при конфликте
+    while True:
+        try:
+            await dp.start_polling(bot, drop_pending_updates=True)
+        except Exception as e:
+            logging.error(f"Polling error: {e}. Restarting in 10 seconds...")
+            await asyncio.sleep(10)
 
 async def main():
     app = web.Application()
