@@ -1,11 +1,12 @@
 from aiogram.fsm.state import State, StatesGroup
 
 class NewsForm(StatesGroup):
-    текст = State()
-    возраст = State()
-    имя = State()
-    район = State()
-    анонимный = State()
+    media = State()          # сбор медиа
+    text = State()           # обязательный текст новости
+    name = State()
+    age = State()
+    district = State()
+    anonymous = State()
 
 class AdminEdit(StatesGroup):
-    new_text = State()   # состояние для получения нового текста от админа 
+    new_text = State()
