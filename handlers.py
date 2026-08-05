@@ -10,7 +10,7 @@ from aiogram.types import (
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 
-from states import NewsForm, AdminEdit
+from states import NewsForm, AdminEdit, ContactForm
 from keyboards import skip_keyboard, anonymous_keyboard, admin_keyboard
 
 router = Router()
@@ -287,14 +287,20 @@ async def admin_action(callback: CallbackQuery, state: FSMContext):
             f"{news['text'] or '—'}\n\n"
             f"👤 {news['author']}"
         )
+# Кнопки для подписчиков канала
+channel_button = InlineKeyboardMarkup(inline_keyboard=[
+    [
+        InlineKeyboardButton(
+            text="📝 Предложить новость",
+            url="https://t.me/PodslUssurBot?start=news"
+        ),
+        InlineKeyboardButton(
+            text="📩 Связь с админом",
+            url="https://t.me/PodslUssurBot"
+        )
+    ]
+]) 
 
-        # Кнопка для подписчиков канала
-        channel_button = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(
-                text="📝 Предложить новость",
-                url="https://t.me/PodslUssurBot?start=news"
-            )]
-        ])
 
         try:
             media_list = news.get("media", [])
@@ -405,3 +411,36 @@ async def receive_new_text(message: Message, state: FSMContext):
 
     await message.answer("✅ Текст обновлён.")
     await state.clear()
+# ---- КОНТАКТ: связь с администратором ----
+@router.message(Command("contact"))
+async def contact_start(message: Message, state: FSMContext):
+    await state.set_state(ContactForm.waiting_for_message)
+    await message.answer(
+        "✍️ Напишите ваше сообщение для администратора.\n"
+        "Мы постараемся ответить вам в ближайшее время."
+    )
+
+@router.message(ContactForm.waiting_for_message, F.text)
+async def contact_send(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+    username = message.from_user.username or "без username"
+    text = message.text
+
+    admin_text = (
+        f"📩 *Сообщение от пользователя*\n"
+        f"ID: `{user_id}`\n"
+        f"Username: @{username}\n\n"
+        f"Сообщение:\n{text}"
+    )
+    await message.bot.send_message(
+        chat_id=ADMIN_ID,
+        text=admin_text,
+        parse_mode="Markdown"
+    )
+
+    await message.answer("✅ Ваше сообщение отправлено. Мы свяжемся с вами.")
+    await state.clear()
+
+@router.message(ContactForm.waiting_for_message)
+async def contact_unknown(message: Message, state: FSMContext):
+    await message.answer("Пожалуйста, отправьте текстовое сообщение.")
