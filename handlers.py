@@ -292,7 +292,7 @@ async def admin_action(callback: CallbackQuery, state: FSMContext):
         channel_button = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(
                 text="📝 Предложить новость",
-                url="https://t.me/Pods1UssurBot?start=news"
+                url="https://t.me/PodslUssurBot?start=news"
             )]
         ])
 
