@@ -20,17 +20,17 @@ async def health_check(request):
     return web.Response(text="OK")
 
 async def start_bot():
-    # Устанавливаем команды для меню
+    # Команды в меню (добавлена /contact)
     await bot.set_my_commands([
-        types.BotCommand(command="start", description="🔄 Запустить бота")
+        types.BotCommand(command="start", description="🔄 Главное меню"),
+        types.BotCommand(command="news", description="📝 Написать новость"),
+        types.BotCommand(command="contact", description="📩 Связаться с админом")
     ])
     logging.info("Commands set")
 
-    # Удаляем вебхук и сбрасываем обновления
     await bot.delete_webhook(drop_pending_updates=True)
     logging.info("Webhook deleted")
 
-    # Запускаем polling с автоматическими повторными попытками при конфликте
     while True:
         try:
             await dp.start_polling(bot, drop_pending_updates=True)
