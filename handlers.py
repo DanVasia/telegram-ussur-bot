@@ -1,8 +1,8 @@
-import os
+ import os
 import logging
 from aiogram import Router, F
 from aiogram.types import (
-    Message, CallbackQuery, 
+    Message, CallbackQuery,
     InputMediaPhoto, InputMediaVideo,
     InlineKeyboardMarkup, InlineKeyboardButton,
     ReplyKeyboardRemove
@@ -18,14 +18,9 @@ router = Router()
 ADMIN_ID = int(os.getenv("ADMIN_ID", 0))
 CHANNEL_ID = int(os.getenv("CHANNEL_ID", 0))
 
-pending_news = {}  # хранение данных для модерации
+pending_news = {}
 
-# ---- ХЕЛПЕРЫ ДЛЯ ОТПРАВКИ МЕДИА ----
 def build_media_group(media_list, caption=""):
-    """
-    Собирает медиагруппу из списка медиа-объектов.
-    media_list: [{'type':'photo', 'file_id':...}, ...]
-    """
     if not media_list:
         return None
     group = []
@@ -42,40 +37,36 @@ def build_media_group(media_list, caption=""):
                 group.append(InputMediaVideo(media=item['file_id']))
     return group
 
-# ---- ОБРАБОТЧИК КОМАНДЫ /start (с поддержкой ?start=news) ----
+# ---- СТАРТ (с поддержкой ?start=news) ----
 @router.message(Command("start"))
 async def start_command(message: Message, state: FSMContext):
     args = message.text.split(maxsplit=1)
     if len(args) > 1 and args[1] == "news":
-        # Запускаем опрос сразу (без приветствия и без клавиатуры)
         await state.set_state(NewsForm.media)
         await state.update_data(media_list=[])
         await message.answer(
             "📝 Отправьте фото или видео для новости (можно несколько).\n"
-            "После каждого файла вы можете отправить ещё или нажать «Пропустить», чтобы перейти к тексту.",
+            "После каждого файла вы можете отправить ещё или нажать «Пропустить».",
             reply_markup=skip_keyboard
         )
         return
-    # Стандартное приветствие с кнопкой (если используете) или просто текст
-    # Если у вас есть main_menu_keyboard, можно показать, но мы просто даём текст и предлагаем /news
     await message.answer(
         "👋 Добро пожаловать!\n"
-        "Нажмите кнопку меню «📝 Написать новость» или используйте команду /news.",
-        reply_markup=None  # или главная клавиатура, если есть
+        "Используйте команды из меню (синяя кнопка)."
     )
 
-# ---- ОБРАБОТЧИК КОМАНДЫ /news (для удобства) ----
+# ---- КОМАНДА /news ----
 @router.message(Command("news"))
 async def news_command(message: Message, state: FSMContext):
     await state.set_state(NewsForm.media)
     await state.update_data(media_list=[])
     await message.answer(
         "📝 Отправьте фото или видео для новости (можно несколько).\n"
-        "После каждого файла вы можете отправить ещё или нажать «Пропустить», чтобы перейти к тексту.",
+        "После каждого файла вы можете отправить ещё или нажать «Пропустить».",
         reply_markup=skip_keyboard
     )
 
-# ---- ШАГ 1: МЕДИА (приём фото/видео) ----
+# ---- ОБРАБОТЧИКИ ОПРОСА (NewsForm) ----
 @router.message(NewsForm.media, F.photo | F.video)
 async def receive_media(message: Message, state: FSMContext):
     data = await state.get_data()
@@ -88,7 +79,7 @@ async def receive_media(message: Message, state: FSMContext):
         media_list.append({'type': 'video', 'file_id': file_id})
     await state.update_data(media_list=media_list)
     await message.answer(
-        "✅ Медиа получено. Отправьте ещё фото/видео или нажмите «Пропустить», чтобы перейти к тексту.",
+        "✅ Получено. Отправьте ещё или нажмите «Пропустить».",
         reply_markup=skip_keyboard
     )
 
@@ -97,30 +88,27 @@ async def skip_media(message: Message, state: FSMContext):
     if message.text == "Пропустить":
         await state.set_state(NewsForm.text)
         await message.answer(
-            "Теперь напишите текст новости (это обязательно).",
-            reply_markup=None  # убираем клавиатуру, чтобы не было кнопки "Пропустить"
+            "Теперь напишите текст новости (обязательно).",
+            reply_markup=None
         )
     else:
         await message.answer(
-            "Пожалуйста, отправьте фото/видео или нажмите «Пропустить».",
+            "Отправьте фото/видео или нажмите «Пропустить».",
             reply_markup=skip_keyboard
         )
 
-# ---- ШАГ 2: ТЕКСТ (обязательный) ----
 @router.message(NewsForm.text, F.text)
 async def receive_text(message: Message, state: FSMContext):
-    text = message.text
-    if text == "Пропустить":
-        await message.answer("❌ Текст новости обязателен. Пожалуйста, напишите текст.")
+    if message.text == "Пропустить":
+        await message.answer("❌ Текст обязателен.")
         return
-    await state.update_data(text=text)
+    await state.update_data(text=message.text)
     await state.set_state(NewsForm.name)
     await message.answer(
         "Как вас зовут? (можно пропустить)",
         reply_markup=skip_keyboard
     )
 
-# ---- ШАГ 3: ИМЯ ----
 @router.message(NewsForm.name, F.text)
 async def receive_name(message: Message, state: FSMContext):
     if message.text == "Пропустить":
@@ -133,7 +121,6 @@ async def receive_name(message: Message, state: FSMContext):
         reply_markup=skip_keyboard
     )
 
-# ---- ШАГ 4: ВОЗРАСТ ----
 @router.message(NewsForm.age, F.text)
 async def receive_age(message: Message, state: FSMContext):
     if message.text == "Пропустить":
@@ -146,7 +133,6 @@ async def receive_age(message: Message, state: FSMContext):
         reply_markup=skip_keyboard
     )
 
-# ---- ШАГ 5: РАЙОН ----
 @router.message(NewsForm.district, F.text)
 async def receive_district(message: Message, state: FSMContext):
     if message.text == "Пропустить":
@@ -159,7 +145,6 @@ async def receive_district(message: Message, state: FSMContext):
         reply_markup=anonymous_keyboard
     )
 
-# ---- ШАГ 6: АНОНИМНОСТЬ ----
 @router.callback_query(NewsForm.anonymous)
 async def receive_anonymous(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -171,10 +156,8 @@ async def receive_anonymous(callback: CallbackQuery, state: FSMContext):
 
     if callback.data == "anon_yes":
         author = "Аноним"
-        anon = True
     else:
         author = name if name else "Без имени"
-        anon = False
 
     news_data = {
         "media": media_list,
@@ -183,7 +166,6 @@ async def receive_anonymous(callback: CallbackQuery, state: FSMContext):
         "age": age,
         "district": district,
         "author": author,
-        "anon": anon,
         "user_id": callback.from_user.id,
         "username": callback.from_user.username or ""
     }
@@ -194,7 +176,6 @@ async def receive_anonymous(callback: CallbackQuery, state: FSMContext):
         await callback.answer()
         return
 
-    # Текст для админа
     admin_text = (
         f"📝 *Новая новость*\n"
         f"Текст: {text or '—'}\n"
@@ -225,12 +206,10 @@ async def receive_anonymous(callback: CallbackQuery, state: FSMContext):
                         reply_markup=admin_keyboard
                     )
             else:
-                # Отправляем альбом (кнопки нельзя прикрепить к альбому)
                 await callback.bot.send_media_group(
                     chat_id=ADMIN_ID,
                     media=group
                 )
-                # Отправляем отдельное сообщение с кнопками
                 msg = await callback.bot.send_message(
                     chat_id=ADMIN_ID,
                     text=admin_text,
@@ -249,26 +228,25 @@ async def receive_anonymous(callback: CallbackQuery, state: FSMContext):
         await callback.message.answer("✅ Новость отправлена на модерацию.")
         await state.clear()
         await callback.answer()
-
     except Exception as e:
-        logging.error(f"Ошибка отправки админу: {e}")
-        await callback.message.answer("❌ Произошла ошибка при отправке новости администратору.")
+        logging.error(f"Ошибка: {e}")
+        await callback.message.answer("❌ Ошибка при отправке.")
         await state.clear()
         await callback.answer()
 
-# ---- ДЕЙСТВИЯ АДМИНИСТРАТОРА ----
+# ---- АДМИНИСТРАТОР: ПУБЛИКАЦИЯ / ОТКЛОНЕНИЕ ----
 @router.callback_query(F.data.in_(["publish", "reject"]))
 async def admin_action(callback: CallbackQuery, state: FSMContext):
     admin_msg_id = callback.message.message_id
     news = pending_news.get(admin_msg_id)
     if not news:
-        await callback.answer("❌ Данные новости не найдены.")
+        await callback.answer("❌ Данные не найдены.")
         return
 
     if callback.data == "reject":
         await callback.bot.send_message(
             chat_id=news["user_id"],
-            text="❌ Ваша новость отклонена модератором."
+            text="❌ Ваша новость отклонена."
         )
         await callback.message.edit_text(
             f"{callback.message.text}\n\n⛔ Отклонено",
@@ -287,20 +265,20 @@ async def admin_action(callback: CallbackQuery, state: FSMContext):
             f"{news['text'] or '—'}\n\n"
             f"👤 {news['author']}"
         )
-# Кнопки для подписчиков канала
-channel_button = InlineKeyboardMarkup(inline_keyboard=[
-    [
-        InlineKeyboardButton(
-            text="📝 Предложить новость",
-            url="https://t.me/PodslUssurBot?start=news"
-        ),
-        InlineKeyboardButton(
-            text="📩 Связь с админом",
-            url="https://t.me/PodslUssurBot"
-        )
-    ]
-]) 
 
+        # КНОПКИ ПОД ПОСТОМ
+        channel_button = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📝 Предложить новость",
+                    url="https://t.me/PodslUssurBot?start=news"
+                ),
+                InlineKeyboardButton(
+                    text="📩 Связь с админом",
+                    url="https://t.me/PodslUssurBot"
+                )
+            ]
+        ])
 
         try:
             media_list = news.get("media", [])
@@ -322,14 +300,13 @@ channel_button = InlineKeyboardMarkup(inline_keyboard=[
                             reply_markup=channel_button
                         )
                 else:
-                    # Отправляем альбом (кнопку прикрепляем отдельным сообщением)
                     await callback.bot.send_media_group(
                         chat_id=CHANNEL_ID,
                         media=group
                     )
                     await callback.bot.send_message(
                         chat_id=CHANNEL_ID,
-                        text="📢 Новая новость (смотрите выше)",
+                        text=channel_text,
                         reply_markup=channel_button
                     )
             else:
@@ -339,7 +316,6 @@ channel_button = InlineKeyboardMarkup(inline_keyboard=[
                     reply_markup=channel_button
                 )
 
-            # Уведомление пользователю
             await callback.bot.send_message(
                 chat_id=news["user_id"],
                 text="✅ Ваша новость опубликована в канале!"
@@ -352,7 +328,7 @@ channel_button = InlineKeyboardMarkup(inline_keyboard=[
             await callback.answer("Новость опубликована.")
         except Exception as e:
             logging.error(f"Ошибка публикации: {e}")
-            await callback.answer(f"Ошибка публикации: {e}")
+            await callback.answer(f"Ошибка: {e}")
 
 # ---- РЕДАКТИРОВАНИЕ (только текст) ----
 @router.callback_query(F.data == "edit")
@@ -364,7 +340,7 @@ async def edit_news(callback: CallbackQuery, state: FSMContext):
         return
     await state.set_state(AdminEdit.new_text)
     await state.update_data(edit_msg_id=admin_msg_id)
-    await callback.message.answer("✏️ Отправьте новый текст новости (только текст).")
+    await callback.message.answer("✏️ Отправьте новый текст.")
     await callback.answer()
 
 @router.message(AdminEdit.new_text, F.text)
@@ -379,8 +355,6 @@ async def receive_new_text(message: Message, state: FSMContext):
         return
 
     news["text"] = new_text
-
-    # Обновляем сообщение админа
     admin_text = (
         f"📝 *Новая новость (отредактировано)*\n"
         f"Текст: {new_text or '—'}\n"
@@ -399,7 +373,6 @@ async def receive_new_text(message: Message, state: FSMContext):
             reply_markup=admin_keyboard
         )
     except Exception:
-        # Если не удалось отредактировать (например, медиа), отправляем новое сообщение
         new_msg = await message.bot.send_message(
             chat_id=ADMIN_ID,
             text=admin_text,
@@ -411,6 +384,7 @@ async def receive_new_text(message: Message, state: FSMContext):
 
     await message.answer("✅ Текст обновлён.")
     await state.clear()
+
 # ---- КОНТАКТ: связь с администратором ----
 @router.message(Command("contact"))
 async def contact_start(message: Message, state: FSMContext):
