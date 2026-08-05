@@ -10,3 +10,5 @@ class NewsForm(StatesGroup):
 
 class AdminEdit(StatesGroup):
     new_text = State()
+class ContactForm(StatesGroup):
+    waiting_for_message = State()
