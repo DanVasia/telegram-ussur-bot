@@ -419,14 +419,13 @@ async def contact_send(message: Message, state: FSMContext):
 async def contact_unknown(message: Message, state: FSMContext):
     await message.answer("Пожалуйста, отправьте текстовое сообщение.")
 # ---- ОТВЕТ АДМИНА ПОЛЬЗОВАТЕЛЮ (только для ADMIN_ID) ----
+# ---- ОТВЕТ АДМИНА ПОЛЬЗОВАТЕЛЮ (только для ADMIN_ID) ----
 @router.message(Command("reply"))
 async def reply_to_user(message: Message, state: FSMContext):
-    # Проверяем, что команду вызывает администратор
     if message.from_user.id != ADMIN_ID:
         await message.answer("⛔ У вас нет прав на эту команду.")
         return
 
-    # Разбираем команду: /reply 123456789 Текст ответа
     args = message.text.split(maxsplit=2)
     if len(args) < 3:
         await message.answer(
@@ -444,7 +443,6 @@ async def reply_to_user(message: Message, state: FSMContext):
         await message.answer("❌ ID пользователя должен быть числом.")
         return
 
-    # Отправляем ответ пользователю
     try:
         await message.bot.send_message(
             chat_id=user_id,
