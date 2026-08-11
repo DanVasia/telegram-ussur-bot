@@ -5,7 +5,7 @@ from aiohttp import web
 from aiogram import Bot, Dispatcher, types
 from aiogram.fsm.storage.memory import MemoryStorage
 from handlers import router
-from scheduler import setup_scheduler   # <-- импорт здесь
+from scheduler import setup_scheduler
 
 logging.basicConfig(level=logging.INFO)
 
@@ -40,7 +40,6 @@ async def start_bot():
             await asyncio.sleep(10)
 
 async def main():
-    # Запускаем веб-сервер для health check
     app = web.Application()
     app.router.add_get("/", health_check)
     runner = web.AppRunner(app)
@@ -49,11 +48,10 @@ async def main():
     await site.start()
     logging.info("Health check server running on port 10000")
 
-    # ----- ЗАПУСК ПЛАНИРОВЩИКА (ежедневная погода) -----
+    # Запускаем планировщик (ежедневная погода)
     scheduler = setup_scheduler(bot)
-    # ----- КОНЕЦ -----
 
-    # Запускаем бота (бесконечный polling)
+    # Запускаем бота
     await start_bot()
 
 if __name__ == "__main__":
