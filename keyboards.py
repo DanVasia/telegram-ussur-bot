@@ -5,11 +5,13 @@ from aiogram.types import (
     InlineKeyboardButton,
 )
 
+# Клавиатура "Пропустить" (Reply)
 skip_keyboard = ReplyKeyboardMarkup(
     keyboard=[[KeyboardButton(text="Пропустить")]],
     resize_keyboard=True
 )
 
+# Клавиатура для выбора анонимности новости (Inline)
 anonymous_keyboard = InlineKeyboardMarkup(
     inline_keyboard=[
         [
@@ -19,6 +21,7 @@ anonymous_keyboard = InlineKeyboardMarkup(
     ]
 )
 
+# Клавиатура для администратора (Inline)
 admin_keyboard = InlineKeyboardMarkup(
     inline_keyboard=[
         [
@@ -28,10 +31,13 @@ admin_keyboard = InlineKeyboardMarkup(
         ]
     ]
 )
-# Клавиатура для выбора анонимности комментария
-anonymous_choice_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-    [
-        InlineKeyboardButton(text="🙈 Анонимно", callback_data="comment_anon_yes"),
-        InlineKeyboardButton(text="👤 С именем", callback_data="comment_anon_no")
+
+# ---- НОВАЯ КЛАВИАТУРА ДЛЯ КОММЕНТАРИЕВ (Inline) ----
+anonymous_choice_keyboard = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [
+            InlineKeyboardButton(text="🙈 Анонимно", callback_data="comment_anon_yes"),
+            InlineKeyboardButton(text="👤 С именем", callback_data="comment_anon_no")
+        ]
     ]
-]) 
+)
