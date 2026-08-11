@@ -6,6 +6,7 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.fsm.storage.memory import MemoryStorage
 from handlers import router
 from scheduler import setup_scheduler
+from database import init_db
 
 logging.basicConfig(level=logging.INFO)
 
@@ -40,6 +41,11 @@ async def start_bot():
             await asyncio.sleep(10)
 
 async def main():
+    # Инициализация базы данных
+    init_db()
+    logging.info("Database initialized")
+
+    # Запускаем веб-сервер
     app = web.Application()
     app.router.add_get("/", health_check)
     runner = web.AppRunner(app)
@@ -48,7 +54,7 @@ async def main():
     await site.start()
     logging.info("Health check server running on port 10000")
 
-    # Запускаем планировщик (ежедневная погода)
+    # Запускаем планировщик (погода)
     scheduler = setup_scheduler(bot)
 
     # Запускаем бота
