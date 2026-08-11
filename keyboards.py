@@ -28,3 +28,10 @@ admin_keyboard = InlineKeyboardMarkup(
         ]
     ]
 )
+# Клавиатура для выбора анонимности комментария
+anonymous_choice_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+    [
+        InlineKeyboardButton(text="🙈 Анонимно", callback_data="comment_anon_yes"),
+        InlineKeyboardButton(text="👤 С именем", callback_data="comment_anon_no")
+    ]
+]) 
