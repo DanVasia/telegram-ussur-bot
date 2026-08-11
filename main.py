@@ -50,3 +50,11 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+    from scheduler import setup_scheduler
+
+async def main():
+    # ... твой код (health check, site.start)
+    # Запускаем планировщик
+    scheduler = setup_scheduler(bot)
+    # Затем запускаем бота (polling)
+    await start_bot()
