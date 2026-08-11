@@ -5,6 +5,7 @@ from aiohttp import web
 from aiogram import Bot, Dispatcher, types
 from aiogram.fsm.storage.memory import MemoryStorage
 from handlers import router
+from scheduler import setup_scheduler   # <-- импорт здесь
 
 logging.basicConfig(level=logging.INFO)
 
@@ -20,11 +21,11 @@ async def health_check(request):
     return web.Response(text="OK")
 
 async def start_bot():
-    # Команды в меню (добавлена /contact)
     await bot.set_my_commands([
         types.BotCommand(command="start", description="🔄 Главное меню"),
         types.BotCommand(command="news", description="📝 Написать новость"),
-        types.BotCommand(command="contact", description="📩 Связаться с админом")
+        types.BotCommand(command="contact", description="📩 Связаться с админом"),
+        types.BotCommand(command="weather", description="🌤 Погода")
     ])
     logging.info("Commands set")
 
@@ -39,6 +40,7 @@ async def start_bot():
             await asyncio.sleep(10)
 
 async def main():
+    # Запускаем веб-сервер для health check
     app = web.Application()
     app.router.add_get("/", health_check)
     runner = web.AppRunner(app)
@@ -46,15 +48,13 @@ async def main():
     site = web.TCPSite(runner, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
     await site.start()
     logging.info("Health check server running on port 10000")
+
+    # ----- ЗАПУСК ПЛАНИРОВЩИКА (ежедневная погода) -----
+    scheduler = setup_scheduler(bot)
+    # ----- КОНЕЦ -----
+
+    # Запускаем бота (бесконечный polling)
     await start_bot()
 
 if __name__ == "__main__":
     asyncio.run(main())
-    from scheduler import setup_scheduler
-
-async def main():
-    # ... твой код (health check, site.start)
-    # Запускаем планировщик
-    scheduler = setup_scheduler(bot)
-    # Затем запускаем бота (polling)
-    await start_bot()
