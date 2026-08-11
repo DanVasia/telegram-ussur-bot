@@ -11,10 +11,16 @@ from aiogram.types import (
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 
-from states import NewsForm, AdminEdit, ContactForm
-from keyboards import skip_keyboard, anonymous_keyboard, admin_keyboard
+from states import NewsForm, AdminEdit, ContactForm, CommentState
+from keyboards import (
+    skip_keyboard,
+    anonymous_keyboard,
+    admin_keyboard,
+    anonymous_choice_keyboard
+)
 from video_maker import make_short_video
-from weather import get_weather  # <-- ДОБАВЛЕНО
+from weather import get_weather
+from database import get_db
 
 router = Router()
 
@@ -298,35 +304,48 @@ async def admin_action(callback: CallbackQuery, state: FSMContext):
                 group = build_media_group(media_list, caption=channel_text)
                 if len(group) == 1:
                     if media_list[0]['type'] == 'photo':
-                        await callback.bot.send_photo(
+                        sent_msg = await callback.bot.send_photo(
                             chat_id=CHANNEL_ID,
                             photo=media_list[0]['file_id'],
                             caption=channel_text,
                             reply_markup=channel_button
                         )
                     else:
-                        await callback.bot.send_video(
+                        sent_msg = await callback.bot.send_video(
                             chat_id=CHANNEL_ID,
                             video=media_list[0]['file_id'],
                             caption=channel_text,
                             reply_markup=channel_button
                         )
                 else:
-                    await callback.bot.send_media_group(
+                    sent_msgs = await callback.bot.send_media_group(
                         chat_id=CHANNEL_ID,
                         media=group
                     )
+                    sent_msg = sent_msgs[0]
                     await callback.bot.send_message(
                         chat_id=CHANNEL_ID,
                         text=channel_text,
                         reply_markup=channel_button
                     )
             else:
-                await callback.bot.send_message(
+                sent_msg = await callback.bot.send_message(
                     chat_id=CHANNEL_ID,
                     text=channel_text,
                     reply_markup=channel_button
                 )
+
+            # ----- СОХРАНЯЕМ MESSAGE_ID НОВОСТИ (для комментариев) -----
+            news_message_id = str(sent_msg.message_id)
+
+            # ----- КНОПКА "КОММЕНТИРОВАТЬ" (отдельным сообщением) -----
+            await callback.bot.send_message(
+                chat_id=CHANNEL_ID,
+                text="💬 Оставьте свой комментарий к этой новости",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="💬 Комментировать", callback_data=f"comment_{news_message_id}")]
+                ])
+            )
 
             # ----- НОВЫЙ БЛОК: ГЕНЕРАЦИЯ ВИДЕО ДЛЯ SHORTS -----
             try:
@@ -360,8 +379,9 @@ async def admin_action(callback: CallbackQuery, state: FSMContext):
 
             except Exception as e:
                 logging.error(f"Ошибка генерации видео: {e}")
-            # ----- КОНЕЦ БЛОКА -----
+            # ----- КОНЕЦ БЛОКА ВИДЕО -----
 
+            # Уведомляем пользователя
             await callback.bot.send_message(
                 chat_id=news["user_id"],
                 text="✅ Ваша новость опубликована в канале!"
@@ -465,14 +485,70 @@ async def contact_send(message: Message, state: FSMContext):
 async def contact_unknown(message: Message, state: FSMContext):
     await message.answer("Пожалуйста, отправьте текстовое сообщение.")
 
-# ----- НОВЫЙ ОБРАБОТЧИК ПОГОДЫ -----
+# ---- ПОГОДА ----
 @router.message(Command("weather"))
 async def weather_command(message: Message):
     weather_text = await get_weather()
     await message.answer(weather_text, parse_mode="Markdown")
 
-# Если у тебя есть главное меню с кнопкой "🌤 Погода" – добавь этот обработчик
 @router.message(F.text == "🌤 Погода")
 async def weather_button(message: Message):
     weather_text = await get_weather()
     await message.answer(weather_text, parse_mode="Markdown")
+
+# ---- КОММЕНТАРИИ (треды в канале) ----
+@router.callback_query(F.data.startswith("comment_"))
+async def start_comment(callback: CallbackQuery, state: FSMContext):
+    news_id = callback.data.split("_")[1]
+    await state.update_data(news_id=news_id)
+    await state.set_state(CommentState.waiting_for_text)
+    await callback.message.answer(
+        "✍️ Напишите ваш комментарий к этой новости.\n"
+        "Сначала выберите, как подписать комментарий:",
+        reply_markup=anonymous_choice_keyboard
+    )
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("comment_anon_"))
+async def choose_anonymity(callback: CallbackQuery, state: FSMContext):
+    is_anonymous = callback.data == "comment_anon_yes"
+    await state.update_data(is_anonymous=is_anonymous)
+    await callback.message.edit_text("✅ Вы выбрали подпись. Теперь отправьте текст комментария.")
+    await callback.answer()
+
+@router.message(CommentState.waiting_for_text, F.text)
+async def receive_comment_text(message: Message, state: FSMContext):
+    data = await state.get_data()
+    news_id = data.get("news_id")
+    is_anonymous = data.get("is_anonymous", True)
+    user_id = message.from_user.id
+    username = message.from_user.username or "Пользователь"
+
+    text = message.text
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO comments (news_id, user_id, username, text, is_anonymous) VALUES (?, ?, ?, ?, ?)",
+            (news_id, user_id, username, text, is_anonymous)
+        )
+        conn.commit()
+
+    comment_text = f"💬 {text}"
+    if is_anonymous:
+        comment_text += "\n— *Аноним*"
+    else:
+        display_name = f"@{username}" if username != "Пользователь" else username
+        comment_text += f"\n— {display_name}"
+
+    try:
+        await message.bot.send_message(
+            chat_id=CHANNEL_ID,
+            text=comment_text,
+            parse_mode="Markdown",
+            reply_to_message_id=int(news_id)
+        )
+        await message.answer("✅ Комментарий опубликован в канале!")
+    except Exception as e:
+        await message.answer(f"❌ Не удалось отправить комментарий: {e}")
+        logging.error(f"Comment send error: {e}")
+
+    await state.clear()
