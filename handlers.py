@@ -1,5 +1,6 @@
 import os
 import logging
+import tempfile
 from aiogram import Router, F
 from aiogram.types import (
     Message, CallbackQuery,
@@ -12,6 +13,7 @@ from aiogram.fsm.context import FSMContext
 
 from states import NewsForm, AdminEdit, ContactForm
 from keyboards import skip_keyboard, anonymous_keyboard, admin_keyboard
+from video_maker import make_short_video   # <-- НОВЫЙ ИМПОРТ
 
 router = Router()
 
@@ -20,6 +22,15 @@ CHANNEL_ID = int(os.getenv("CHANNEL_ID", 0))
 
 pending_news = {}
 
+# ---- ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ДЛЯ СКАЧИВАНИЯ МЕДИА ПО FILE_ID ----
+async def download_media_by_file_id(bot, file_id, dest_path):
+    file_info = await bot.get_file(file_id)
+    downloaded_file = await bot.download_file(file_info.file_path)
+    with open(dest_path, 'wb') as f:
+        f.write(downloaded_file.getvalue())
+    return dest_path
+
+# ---- ПОСТРОЕНИЕ МЕДИАГРУППЫ ----
 def build_media_group(media_list, caption=""):
     if not media_list:
         return None
@@ -51,7 +62,7 @@ async def start_command(message: Message, state: FSMContext):
         )
         return
     await message.answer(
-        "👋 Добро пожаловать!\n"
+        "👋 Добро пожаловать в «Подслушано Уссурийск»!\n"
         "Используйте команды из меню (синяя кнопка)."
     )
 
@@ -316,6 +327,50 @@ async def admin_action(callback: CallbackQuery, state: FSMContext):
                     reply_markup=channel_button
                 )
 
+            # ----- НОВЫЙ БЛОК: ГЕНЕРАЦИЯ ВИДЕО ДЛЯ SHORTS -----
+            try:
+                # Получаем текст новости (обрежем, чтобы не было слишком длинно)
+                raw_text = news.get('text', 'Новость Уссурийска')
+                # Ограничим текст для видео (не более 200 символов)
+                short_text = raw_text[:200] + ('...' if len(raw_text) > 200 else '')
+
+                # Определяем, есть ли медиа
+                media_list_for_video = news.get('media', [])
+                media_file_path = None
+                if media_list_for_video:
+                    # Берём первый медиафайл
+                    first_media = media_list_for_video[0]
+                    file_id = first_media['file_id']
+                    # Скачиваем во временный файл
+                    temp_media = tempfile.NamedTemporaryFile(delete=False, suffix='.jpg')
+                    temp_media.close()
+                    media_file_path = temp_media.name
+                    await download_media_by_file_id(callback.bot, file_id, media_file_path)
+
+                # Генерируем видео
+                video_filename = f"shorts_{callback.message.message_id}.mp4"
+                make_short_video(short_text, media_file_path, video_filename)
+
+                # Отправляем видео админу
+                with open(video_filename, 'rb') as vid:
+                    await callback.bot.send_video(
+                        chat_id=ADMIN_ID,
+                        video=vid,
+                        caption="🎬 Видео для Shorts готово! Загрузи его на YouTube."
+                    )
+
+                # Удаляем временные файлы
+                if media_file_path and os.path.exists(media_file_path):
+                    os.remove(media_file_path)
+                if os.path.exists(video_filename):
+                    os.remove(video_filename)
+
+            except Exception as e:
+                logging.error(f"Ошибка генерации видео: {e}")
+                # Не прерываем основной процесс, только логируем
+            # ----- КОНЕЦ БЛОКА -----
+
+            # Уведомляем пользователя
             await callback.bot.send_message(
                 chat_id=news["user_id"],
                 text="✅ Ваша новость опубликована в канале!"
@@ -418,37 +473,3 @@ async def contact_send(message: Message, state: FSMContext):
 @router.message(ContactForm.waiting_for_message)
 async def contact_unknown(message: Message, state: FSMContext):
     await message.answer("Пожалуйста, отправьте текстовое сообщение.")
-# ---- ОТВЕТ АДМИНА ПОЛЬЗОВАТЕЛЮ (только для ADMIN_ID) ----
-# ---- ОТВЕТ АДМИНА ПОЛЬЗОВАТЕЛЮ (только для ADMIN_ID) ----
-@router.message(Command("reply"))
-async def reply_to_user(message: Message, state: FSMContext):
-    if message.from_user.id != ADMIN_ID:
-        await message.answer("⛔ У вас нет прав на эту команду.")
-        return
-
-    args = message.text.split(maxsplit=2)
-    if len(args) < 3:
-        await message.answer(
-            "❗ Используйте: /reply <user_id> <текст ответа>\n"
-            "Например: /reply 123456789 Привет, это ответ!"
-        )
-        return
-
-    user_id_str = args[1]
-    reply_text = args[2]
-
-    try:
-        user_id = int(user_id_str)
-    except ValueError:
-        await message.answer("❌ ID пользователя должен быть числом.")
-        return
-
-    try:
-        await message.bot.send_message(
-            chat_id=user_id,
-            text=f"📩 *Ответ администратора:*\n{reply_text}",
-            parse_mode="Markdown"
-        )
-        await message.answer(f"✅ Ответ отправлен пользователю {user_id}.")
-    except Exception as e:
-        await message.answer(f"❌ Ошибка: {e}. Возможно, пользователь не начал чат с ботом.")
