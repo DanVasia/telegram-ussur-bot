@@ -13,7 +13,8 @@ from aiogram.fsm.context import FSMContext
 
 from states import NewsForm, AdminEdit, ContactForm
 from keyboards import skip_keyboard, anonymous_keyboard, admin_keyboard
-from video_maker import make_short_video   # <-- НОВЫЙ ИМПОРТ
+from video_maker import make_short_video
+from weather import get_weather  # <-- ДОБАВЛЕНО
 
 router = Router()
 
@@ -329,29 +330,22 @@ async def admin_action(callback: CallbackQuery, state: FSMContext):
 
             # ----- НОВЫЙ БЛОК: ГЕНЕРАЦИЯ ВИДЕО ДЛЯ SHORTS -----
             try:
-                # Получаем текст новости (обрежем, чтобы не было слишком длинно)
                 raw_text = news.get('text', 'Новость Уссурийска')
-                # Ограничим текст для видео (не более 200 символов)
                 short_text = raw_text[:200] + ('...' if len(raw_text) > 200 else '')
 
-                # Определяем, есть ли медиа
                 media_list_for_video = news.get('media', [])
                 media_file_path = None
                 if media_list_for_video:
-                    # Берём первый медиафайл
                     first_media = media_list_for_video[0]
                     file_id = first_media['file_id']
-                    # Скачиваем во временный файл
                     temp_media = tempfile.NamedTemporaryFile(delete=False, suffix='.jpg')
                     temp_media.close()
                     media_file_path = temp_media.name
                     await download_media_by_file_id(callback.bot, file_id, media_file_path)
 
-                # Генерируем видео
                 video_filename = f"shorts_{callback.message.message_id}.mp4"
                 make_short_video(short_text, media_file_path, video_filename)
 
-                # Отправляем видео админу
                 with open(video_filename, 'rb') as vid:
                     await callback.bot.send_video(
                         chat_id=ADMIN_ID,
@@ -359,7 +353,6 @@ async def admin_action(callback: CallbackQuery, state: FSMContext):
                         caption="🎬 Видео для Shorts готово! Загрузи его на YouTube."
                     )
 
-                # Удаляем временные файлы
                 if media_file_path and os.path.exists(media_file_path):
                     os.remove(media_file_path)
                 if os.path.exists(video_filename):
@@ -367,10 +360,8 @@ async def admin_action(callback: CallbackQuery, state: FSMContext):
 
             except Exception as e:
                 logging.error(f"Ошибка генерации видео: {e}")
-                # Не прерываем основной процесс, только логируем
             # ----- КОНЕЦ БЛОКА -----
 
-            # Уведомляем пользователя
             await callback.bot.send_message(
                 chat_id=news["user_id"],
                 text="✅ Ваша новость опубликована в канале!"
@@ -473,3 +464,15 @@ async def contact_send(message: Message, state: FSMContext):
 @router.message(ContactForm.waiting_for_message)
 async def contact_unknown(message: Message, state: FSMContext):
     await message.answer("Пожалуйста, отправьте текстовое сообщение.")
+
+# ----- НОВЫЙ ОБРАБОТЧИК ПОГОДЫ -----
+@router.message(Command("weather"))
+async def weather_command(message: Message):
+    weather_text = await get_weather()
+    await message.answer(weather_text, parse_mode="Markdown")
+
+# Если у тебя есть главное меню с кнопкой "🌤 Погода" – добавь этот обработчик
+@router.message(F.text == "🌤 Погода")
+async def weather_button(message: Message):
+    weather_text = await get_weather()
+    await message.answer(weather_text, parse_mode="Markdown")
