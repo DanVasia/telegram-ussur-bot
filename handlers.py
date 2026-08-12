@@ -16,7 +16,8 @@ from keyboards import (
     skip_keyboard,
     anonymous_keyboard,
     admin_keyboard,
-    anonymous_choice_keyboard
+    anonymous_choice_keyboard,
+    main_menu
 )
 from video_maker import make_short_video
 from weather import get_weather
@@ -29,7 +30,22 @@ CHANNEL_ID = int(os.getenv("CHANNEL_ID", 0))
 
 pending_news = {}
 
-# ---- ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ДЛЯ СКАЧИВАНИЯ МЕДИА ПО FILE_ID ----
+# ---- FAQ (Часто задаваемые вопросы) ----
+FAQ_DATA = {
+    "Как предложить новость?": "Напишите /news или нажмите кнопку «📝 Предложить новость» в меню. Бот проведёт вас через все шаги.",
+    "Как оставить комментарий?": "Под каждой новостью в канале есть кнопка «💬 Комментировать». Нажмите её, выберите анонимность и напишите текст.",
+    "Анонимно ли это?": "Да, вы можете публиковать новости и комментарии анонимно. При отправке новости вы выбираете «Анонимно» или «С именем». Для комментариев тоже есть выбор.",
+    "Как связаться с админом?": "Напишите /contact или нажмите кнопку «📩 Связаться с админом» в меню. Ваше сообщение будет переслано администратору.",
+    "Где посмотреть погоду?": "Напишите /weather или нажмите кнопку «🌤 Погода» в меню. Также мы публикуем прогноз в канале каждое утро и вечер.",
+}
+
+def get_faq_keyboard():
+    buttons = []
+    for question in FAQ_DATA.keys():
+        buttons.append([InlineKeyboardButton(text=question, callback_data=f"faq_{question}")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+# ---- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ----
 async def download_media_by_file_id(bot, file_id, dest_path):
     file_info = await bot.get_file(file_id)
     downloaded_file = await bot.download_file(file_info.file_path)
@@ -37,7 +53,6 @@ async def download_media_by_file_id(bot, file_id, dest_path):
         f.write(downloaded_file.getvalue())
     return dest_path
 
-# ---- ПОСТРОЕНИЕ МЕДИАГРУППЫ ----
 def build_media_group(media_list, caption=""):
     if not media_list:
         return None
@@ -55,7 +70,7 @@ def build_media_group(media_list, caption=""):
                 group.append(InputMediaVideo(media=item['file_id']))
     return group
 
-# ---- СТАРТ (с поддержкой ?start=news) ----
+# ---- СТАРТ ----
 @router.message(Command("start"))
 async def start_command(message: Message, state: FSMContext):
     args = message.text.split(maxsplit=1)
@@ -70,7 +85,8 @@ async def start_command(message: Message, state: FSMContext):
         return
     await message.answer(
         "👋 Добро пожаловать в «Подслушано Уссурийск»!\n"
-        "Используйте команды из меню (синяя кнопка)."
+        "Используйте кнопки ниже или команды из меню.",
+        reply_markup=main_menu
     )
 
 # ---- КОМАНДА /news ----
@@ -284,7 +300,6 @@ async def admin_action(callback: CallbackQuery, state: FSMContext):
             f"👤 {news['author']}"
         )
 
-        # КНОПКИ ПОД ПОСТОМ
         channel_button = InlineKeyboardMarkup(inline_keyboard=[
             [
                 InlineKeyboardButton(
@@ -335,10 +350,8 @@ async def admin_action(callback: CallbackQuery, state: FSMContext):
                     reply_markup=channel_button
                 )
 
-            # ----- СОХРАНЯЕМ MESSAGE_ID НОВОСТИ (для комментариев) -----
             news_message_id = str(sent_msg.message_id)
 
-            # ----- КНОПКА "КОММЕНТИРОВАТЬ" (отдельным сообщением) -----
             await callback.bot.send_message(
                 chat_id=CHANNEL_ID,
                 text="💬 Оставьте свой комментарий к этой новости",
@@ -347,11 +360,10 @@ async def admin_action(callback: CallbackQuery, state: FSMContext):
                 ])
             )
 
-            # ----- НОВЫЙ БЛОК: ГЕНЕРАЦИЯ ВИДЕО ДЛЯ SHORTS -----
+            # ---- ГЕНЕРАЦИЯ ВИДЕО ----
             try:
                 raw_text = news.get('text', 'Новость Уссурийска')
                 short_text = raw_text[:200] + ('...' if len(raw_text) > 200 else '')
-
                 media_list_for_video = news.get('media', [])
                 media_file_path = None
                 if media_list_for_video:
@@ -379,9 +391,7 @@ async def admin_action(callback: CallbackQuery, state: FSMContext):
 
             except Exception as e:
                 logging.error(f"Ошибка генерации видео: {e}")
-            # ----- КОНЕЦ БЛОКА ВИДЕО -----
 
-            # Уведомляем пользователя
             await callback.bot.send_message(
                 chat_id=news["user_id"],
                 text="✅ Ваша новость опубликована в канале!"
@@ -396,7 +406,7 @@ async def admin_action(callback: CallbackQuery, state: FSMContext):
             logging.error(f"Ошибка публикации: {e}")
             await callback.answer(f"Ошибка: {e}")
 
-# ---- РЕДАКТИРОВАНИЕ (только текст) ----
+# ---- РЕДАКТИРОВАНИЕ ----
 @router.callback_query(F.data == "edit")
 async def edit_news(callback: CallbackQuery, state: FSMContext):
     admin_msg_id = callback.message.message_id
@@ -451,7 +461,7 @@ async def receive_new_text(message: Message, state: FSMContext):
     await message.answer("✅ Текст обновлён.")
     await state.clear()
 
-# ---- КОНТАКТ: связь с администратором ----
+# ---- КОНТАКТ ----
 @router.message(Command("contact"))
 async def contact_start(message: Message, state: FSMContext):
     await state.set_state(ContactForm.waiting_for_message)
@@ -496,7 +506,7 @@ async def weather_button(message: Message):
     weather_text = await get_weather()
     await message.answer(weather_text, parse_mode="Markdown")
 
-# ---- КОММЕНТАРИИ (треды в канале) ----
+# ---- КОММЕНТАРИИ ----
 @router.callback_query(F.data.startswith("comment_"))
 async def start_comment(callback: CallbackQuery, state: FSMContext):
     news_id = callback.data.split("_")[1]
@@ -552,3 +562,25 @@ async def receive_comment_text(message: Message, state: FSMContext):
         logging.error(f"Comment send error: {e}")
 
     await state.clear()
+
+# ---- FAQ ----
+@router.message(Command("faq"))
+async def faq_command(message: Message):
+    await message.answer(
+        "❓ Выберите интересующий вас вопрос:",
+        reply_markup=get_faq_keyboard()
+    )
+
+@router.message(F.text == "❓ Частые вопросы")
+async def faq_button(message: Message):
+    await message.answer(
+        "❓ Выберите интересующий вас вопрос:",
+        reply_markup=get_faq_keyboard()
+    )
+
+@router.callback_query(F.data.startswith("faq_"))
+async def faq_callback(callback: CallbackQuery):
+    question = callback.data[4:]
+    answer = FAQ_DATA.get(question, "Ответ не найден.")
+    await callback.message.answer(f"📌 *{question}*\n\n{answer}", parse_mode="Markdown")
+    await callback.answer()
