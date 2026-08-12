@@ -26,7 +26,8 @@ async def start_bot():
         types.BotCommand(command="start", description="🔄 Главное меню"),
         types.BotCommand(command="news", description="📝 Написать новость"),
         types.BotCommand(command="contact", description="📩 Связаться с админом"),
-        types.BotCommand(command="weather", description="🌤 Погода")
+        types.BotCommand(command="weather", description="🌤 Погода"),
+        types.BotCommand(command="faq", description="❓ Частые вопросы")
     ])
     logging.info("Commands set")
 
@@ -41,11 +42,9 @@ async def start_bot():
             await asyncio.sleep(10)
 
 async def main():
-    # Инициализация базы данных
     init_db()
     logging.info("Database initialized")
 
-    # Запускаем веб-сервер
     app = web.Application()
     app.router.add_get("/", health_check)
     runner = web.AppRunner(app)
@@ -54,10 +53,8 @@ async def main():
     await site.start()
     logging.info("Health check server running on port 10000")
 
-    # Запускаем планировщик (погода)
     scheduler = setup_scheduler(bot)
 
-    # Запускаем бота
     await start_bot()
 
 if __name__ == "__main__":
