@@ -5,23 +5,27 @@ from aiogram.types import (
     InlineKeyboardButton,
 )
 
-# Клавиатура "Пропустить" (Reply)
+# ---- РЕПЛИ-КЛАВИАТУРЫ ----
+
+# "Пропустить"
 skip_keyboard = ReplyKeyboardMarkup(
     keyboard=[[KeyboardButton(text="Пропустить")]],
     resize_keyboard=True
 )
 
-# Клавиатура для выбора анонимности новости (Inline)
+# ---- ИНЛАЙН-КЛАВИАТУРЫ ----
+
+# Анонимность новости
 anonymous_keyboard = InlineKeyboardMarkup(
     inline_keyboard=[
         [
-            InlineKeyboardButton(text="Анонимно", callback_data="anon_yes"),
-            InlineKeyboardButton(text="С именем", callback_data="anon_no")
+            InlineKeyboardButton(text="🙈 Анонимно", callback_data="anon_yes"),
+            InlineKeyboardButton(text="👤 С именем", callback_data="anon_no")
         ]
     ]
 )
 
-# Клавиатура для администратора (Inline)
+# Админская клавиатура (публикация / редактирование / отклонение)
 admin_keyboard = InlineKeyboardMarkup(
     inline_keyboard=[
         [
@@ -32,7 +36,7 @@ admin_keyboard = InlineKeyboardMarkup(
     ]
 )
 
-# ---- НОВАЯ КЛАВИАТУРА ДЛЯ КОММЕНТАРИЕВ (Inline) ----
+# Выбор анонимности для комментария
 anonymous_choice_keyboard = InlineKeyboardMarkup(
     inline_keyboard=[
         [
@@ -40,4 +44,14 @@ anonymous_choice_keyboard = InlineKeyboardMarkup(
             InlineKeyboardButton(text="👤 С именем", callback_data="comment_anon_no")
         ]
     ]
+)
+
+# ---- ГЛАВНОЕ МЕНЮ (ReplyKeyboard) ----
+main_menu = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="📝 Предложить новость")],
+        [KeyboardButton(text="🌤 Погода"), KeyboardButton(text="📩 Связаться с админом")],
+        [KeyboardButton(text="❓ Частые вопросы")]
+    ],
+    resize_keyboard=True
 )
