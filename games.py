@@ -1,7 +1,8 @@
-import aiohttp
 import random
 import re
+import json
 from urllib.parse import unquote
+from ai_chat import ask_ai  # импортируем функцию для запросов к ИИ
 
 # ---------- 1. КАМЕНЬ-НОЖНИЦЫ-БУМАГА ----------
 RPS_CHOICES = ["камень", "ножницы", "бумага"]
@@ -84,73 +85,159 @@ def get_blackjack_state(player_hand, dealer_hand, game_over=False):
     else:
         return f"Ваши карты: {format_hand(player_hand)} ({hand_value(player_hand)})\nКарта бота: {card_emoji(dealer_hand[0])} + ?\n\nВведите 'взять' или 'стоп'."
 
-# ---------- 6. ВИКТОРИНА (старые локальные вопросы – для резерва) ----------
-QUIZ_QUESTIONS = [
-    {"question": "Сколько планет в Солнечной системе?", "options": ["7", "8", "9", "10"], "answer": 1},
-    {"question": "Какой океан самый большой?", "options": ["Атлантический", "Индийский", "Тихий", "Северный Ледовитый"], "answer": 2},
-    {"question": "Где находится Эйфелева башня?", "options": ["Лондон", "Париж", "Рим", "Берлин"], "answer": 1},
-    {"question": "Кто написал 'Евгения Онегина'?", "options": ["Толстой", "Достоевский", "Пушкин", "Чехов"], "answer": 2},
-    {"question": "Какой газ мы вдыхаем?", "options": ["Кислород", "Углекислый газ", "Азот", "Водород"], "answer": 0}
+# ---------- 6. ВИКТОРИНА (ВСТРОЕННАЯ РУССКАЯ БАЗА) ----------
+RUSSIAN_QUIZ = [
+    # Категория: География
+    {
+        "question": "Какой океан самый большой?",
+        "options": ["Атлантический", "Индийский", "Тихий", "Северный Ледовитый"],
+        "answer": 2,
+        "category": "География",
+        "difficulty": "easy"
+    },
+    {
+        "question": "Какая страна занимает первое место по площади?",
+        "options": ["США", "Китай", "Россия", "Канада"],
+        "answer": 2,
+        "category": "География",
+        "difficulty": "easy"
+    },
+    {
+        "question": "Как называется столица Австралии?",
+        "options": ["Сидней", "Мельбурн", "Канберра", "Перт"],
+        "answer": 2,
+        "category": "География",
+        "difficulty": "medium"
+    },
+    {
+        "question": "Самая длинная река в мире?",
+        "options": ["Амазонка", "Нил", "Миссисипи", "Янцзы"],
+        "answer": 1,
+        "category": "География",
+        "difficulty": "medium"
+    },
+    # Категория: История
+    {
+        "question": "В каком году распался СССР?",
+        "options": ["1989", "1990", "1991", "1992"],
+        "answer": 2,
+        "category": "История",
+        "difficulty": "easy"
+    },
+    {
+        "question": "Кто открыл Америку?",
+        "options": ["Магеллан", "Колумб", "Васко да Гама", "Кук"],
+        "answer": 1,
+        "category": "История",
+        "difficulty": "easy"
+    },
+    {
+        "question": "Первая мировая война началась в ...",
+        "options": ["1914", "1915", "1916", "1917"],
+        "answer": 0,
+        "category": "История",
+        "difficulty": "medium"
+    },
+    # Категория: Уссурийск
+    {
+        "question": "В каком году основан Уссурийск?",
+        "options": ["1860", "1866", "1870", "1880"],
+        "answer": 1,
+        "category": "Уссурийск",
+        "difficulty": "medium"
+    },
+    {
+        "question": "Как назывался Уссурийск до 1935 года?",
+        "options": ["Никольск", "Никольск-Уссурийский", "Уссурийск", "Ворошилов"],
+        "answer": 1,
+        "category": "Уссурийск",
+        "difficulty": "hard"
+    },
+    {
+        "question": "Какая река протекает через Уссурийск?",
+        "options": ["Амур", "Уссури", "Раздольная", "Суйфун"],
+        "answer": 1,
+        "category": "Уссурийск",
+        "difficulty": "easy"
+    },
+    # Категория: Общие знания
+    {
+        "question": "Сколько планет в Солнечной системе?",
+        "options": ["7", "8", "9", "10"],
+        "answer": 1,
+        "category": "Общие знания",
+        "difficulty": "easy"
+    },
+    {
+        "question": "Кто написал 'Евгения Онегина'?",
+        "options": ["Толстой", "Достоевский", "Пушкин", "Чехов"],
+        "answer": 2,
+        "category": "Общие знания",
+        "difficulty": "easy"
+    },
+    {
+        "question": "Какой химический элемент самый распространённый на Земле?",
+        "options": ["Водород", "Кислород", "Азот", "Углерод"],
+        "answer": 0,
+        "category": "Общие знания",
+        "difficulty": "hard"
+    }
 ]
 
-def get_quiz_question(index: int):
-    if index < len(QUIZ_QUESTIONS):
-        q = QUIZ_QUESTIONS[index]
-        text = f"❓ {q['question']}\n\n"
-        for i, opt in enumerate(q['options']):
-            text += f"{i+1}. {opt}\n"
-        return text, q['answer']
-    return None, None
+def get_quiz_categories():
+    categories = set(q["category"] for q in RUSSIAN_QUIZ)
+    return sorted(list(categories))
 
-def check_quiz_answer(index: int, user_answer: int) -> bool:
-    if 0 <= index < len(QUIZ_QUESTIONS):
-        return user_answer == QUIZ_QUESTIONS[index]['answer']
-    return False
-
-# ---------- 7. ВИКТОРИНА (НОВЫЕ функции для API) ----------
-async def fetch_categories():
-    """Возвращает список категорий из OpenTDB."""
-    url = "https://opentdb.com/api_category.php"
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as resp:
-            if resp.status == 200:
-                data = await resp.json()
-                return data.get("trivia_categories", [])
-    return []
-
-async def fetch_quiz_questions(amount=10, category=None, difficulty=None):
-    """Загружает вопросы из OpenTDB с параметрами."""
-    url = "https://opentdb.com/api.php"
-    params = {
-        "amount": amount,
-        "type": "multiple",
-        "encode": "url3986"
-    }
+def get_questions_by_filter(category=None, difficulty=None):
+    filtered = RUSSIAN_QUIZ
     if category:
-        params["category"] = category
+        filtered = [q for q in filtered if q["category"] == category]
     if difficulty and difficulty != "any":
-        params["difficulty"] = difficulty
+        filtered = [q for q in filtered if q["difficulty"] == difficulty]
+    return filtered
 
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url, params=params) as resp:
-            if resp.status != 200:
-                return None
-            data = await resp.json()
-            if data.get("response_code") != 0:
-                return None
-            return data.get("results", [])
+def get_random_questions(amount=10, category=None, difficulty=None):
+    pool = get_questions_by_filter(category, difficulty)
+    if not pool:
+        return []
+    if len(pool) < amount:
+        amount = len(pool)
+    return random.sample(pool, amount)
 
 def format_question(question_data):
-    """Форматирует вопрос для отправки пользователю."""
-    question_text = unquote(question_data["question"])
-    options = [unquote(opt) for opt in question_data["incorrect_answers"]]
-    correct = unquote(question_data["correct_answer"])
-    options.append(correct)
-    random.shuffle(options)
-
-    text = f"❓ {question_text}\n\n"
-    for i, opt in enumerate(options):
+    text = f"❓ {question_data['question']}\n\n"
+    for i, opt in enumerate(question_data['options']):
         text += f"{i+1}. {opt}\n"
+    return text, question_data['answer']
 
-    correct_index = options.index(correct)
-    return text, correct_index
+# ---------- 7. ГЕНЕРАЦИЯ ВОПРОСОВ ЧЕРЕЗ GEMINI ----------
+async def generate_quiz_questions_via_gemini(topic: str, count: int = 10) -> list:
+    """
+    Генерирует вопросы через Gemini на заданную тему.
+    Возвращает список словарей с полями: question, options, answer.
+    """
+    prompt = (
+        f"Сгенерируй {count} интересных вопросов с 4 вариантами ответов на тему '{topic}'. "
+        "Вопросы должны быть на русском языке, не слишком сложные и не слишком простые. "
+        "Ответы должны быть в формате JSON-массива, где каждый объект имеет поля: "
+        "question (строка), options (массив из 4 строк), answer (индекс правильного ответа, начиная с 0). "
+        "Выведи только JSON, без лишнего текста."
+    )
+    response = await ask_ai(prompt, "gemini")  # используем Gemini
+    # Пытаемся извлечь JSON из ответа
+    try:
+        # Ищем блок с JSON (массив)
+        match = re.search(r'\[.*\]', response, re.DOTALL)
+        if match:
+            questions = json.loads(match.group())
+            # Проверяем структуру
+            if isinstance(questions, list) and len(questions) > 0:
+                # Убедимся, что есть все поля
+                for q in questions:
+                    if not all(k in q for k in ("question", "options", "answer")):
+                        return []
+                return questions
+        return []
+    except Exception as e:
+        print(f"Ошибка парсинга JSON: {e}")
+        return []
