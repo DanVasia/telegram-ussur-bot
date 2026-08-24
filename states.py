@@ -22,3 +22,8 @@ class BlackjackState(StatesGroup):
 
 class QuizState(StatesGroup):
     waiting_for_answer = State()
+
+class QuizSetupState(StatesGroup):
+    choosing_category = State()
+    choosing_difficulty = State()
+    choosing_mode = State()
