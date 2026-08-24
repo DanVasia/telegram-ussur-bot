@@ -8,12 +8,12 @@ from aiogram.types import (
     InlineKeyboardMarkup, InlineKeyboardButton,
     ReplyKeyboardRemove
 )
-from aiogram.filters import Command
+from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 
 from states import (
     NewsForm, AdminEdit, ContactForm,
-    CommentState, BlackjackState, QuizState, QuizSetupState
+    CommentState, BlackjackState, QuizState, QuizSetupState, SpinState
 )
 from keyboards import (
     skip_keyboard, anonymous_keyboard, admin_keyboard,
@@ -44,7 +44,7 @@ FAQ_DATA = {
     "Как предложить новость?": "Напишите /news или нажмите кнопку «📝 Предложить новость» в меню. Бот проведёт вас через все шаги.",
     "Как оставить комментарий?": "Под каждой новостью в канале есть кнопка «💬 Комментировать». Нажмите её, выберите анонимность и напишите текст.",
     "Анонимно ли это?": "Да, вы можете публиковать новости и комментарии анонимно. При отправке новости вы выбираете «Анонимно» или «С именем». Для комментариев тоже есть выбор.",
-    "Как связаться с админом?": "Напишите /contact или нажмите кнопку «📩 Связываться с админом» в меню. Ваше сообщение будет переслано администратору.",
+    "Как связаться с админом?": "Напишите /contact или нажмите кнопку «📩 Связаться с админом» в меню. Ваше сообщение будет переслано администратору.",
     "Где посмотреть погоду?": "Напишите /weather или нажмите кнопку «🌤 Погода» в меню. Также мы публикуем прогноз в канале каждое утро и вечер.",
 }
 
@@ -629,24 +629,22 @@ async def coin_command(message: Message):
     result = flip_coin()
     await message.answer(result, parse_mode="Markdown")
 
-# -------- 4. КОЛЕСО ФОРТУНЫ (обновлённое) --------
+# -------- 4. КОЛЕСО ФОРТУНЫ (исправленное) --------
 @router.message(Command("spin"))
 async def spin_command(message: Message, state: FSMContext):
     args = message.text.replace("/spin", "").strip()
     if args:
-        # Если варианты указаны сразу
         result = spin_wheel(args)
         await message.answer(result, parse_mode="Markdown")
     else:
-        # Если команда без вариантов – просим ввести
-        await state.set_state("waiting_for_spin_items")
+        await state.set_state(SpinState.waiting_for_items)
         await message.answer(
             "🎡 Введите варианты через запятую.\n"
             "Например: `Китай, Япония, Корея`",
             parse_mode="Markdown"
         )
 
-@router.message(F.text, lambda m: m.state == "waiting_for_spin_items")
+@router.message(StateFilter(SpinState.waiting_for_items), F.text)
 async def spin_items_received(message: Message, state: FSMContext):
     items = message.text
     result = spin_wheel(items)
@@ -716,7 +714,7 @@ async def quiz_start(message: Message, state: FSMContext):
     await state.set_state(QuizSetupState.choosing_category)
 
     buttons = []
-    for cat in categories[:10]:  # показываем первые 10
+    for cat in categories[:10]:
         buttons.append([InlineKeyboardButton(text=cat["name"], callback_data=f"qcat_{cat['id']}")])
     buttons.append([InlineKeyboardButton(text="📌 Любая", callback_data="qcat_any")])
     await message.answer(
