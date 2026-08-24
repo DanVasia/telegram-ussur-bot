@@ -773,7 +773,7 @@ async def quiz_difficulty_chosen(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text("Сколько вопросов хотите получить?", reply_markup=mode_buttons)
     await callback.answer()
 
-@router.message(QuizSetupState.waiting_for_topic, F.text)
+@router.message(StateFilter(QuizSetupState.waiting_for_topic), F.text)
 async def quiz_topic_received(message: Message, state: FSMContext):
     topic = message.text.strip()
     if not topic:
