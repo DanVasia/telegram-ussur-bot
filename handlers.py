@@ -770,7 +770,7 @@ async def quiz_difficulty_chosen(callback: CallbackQuery, state: FSMContext):
          InlineKeyboardButton(text="10 вопросов", callback_data="qmode_10")],
         [InlineKeyboardButton(text="15 вопросов", callback_data="qmode_15")]
     ])
-    await callback.message.edit_text("Сколько вопросов хотите получить?", reply_markup=mode_buttons)
+        await callback.message.edit_text("Сколько вопросов хотите получить?", reply_markup=mode_buttons)
     await callback.answer()
 
 @router.message(StateFilter(QuizSetupState.waiting_for_topic), F.text)
@@ -778,6 +778,15 @@ async def quiz_topic_received(message: Message, state: FSMContext):
     topic = message.text.strip()
     if not topic:
         await message.answer("❌ Тема не может быть пустой. Попробуйте ещё раз.")
+        return
+    await state.update_data(topic=topic)
+    await state.set_state(QuizSetupState.choosing_mode)
+    mode_buttons = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="5 вопросов", callback_data="qmode_5"),
+         InlineKeyboardButton(text="10 вопросов", callback_data="qmode_10")],
+        [InlineKeyboardButton(text="15 вопросов", callback_data="qmode_15")]
+    ])
+    await message.answer("Сколько вопросов хотите получить?", reply_markup=mode_buttons)
         return
     await state.update_data(topic=topic)
     await state.set_state(QuizSetupState.choosing_mode)
