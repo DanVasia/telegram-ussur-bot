@@ -7,7 +7,7 @@ DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
-GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent"
 
 # ----------------- DEEPSEEK -----------------
 async def ask_deepseek(prompt: str) -> str:
@@ -47,7 +47,7 @@ async def ask_deepseek(prompt: str) -> str:
         logging.error(f"DeepSeek exception: {e}")
         return f"❌ Ошибка подключения к DeepSeek: {e}"
 
-# ----------------- GEMINI -----------------
+# ----------------- GEMINI (модель gemini-pro) -----------------
 async def ask_gemini(prompt: str) -> str:
     if not GEMINI_API_KEY:
         return "⚠️ API-ключ Gemini не настроен."
@@ -64,7 +64,7 @@ async def ask_gemini(prompt: str) -> str:
             async with session.post(url, json=payload) as resp:
                 logging.info(f"Gemini status: {resp.status}")
                 if resp.status == 404:
-                    return "❌ Модель Gemini не найдена (404). Попробуйте другую модель или проверьте ключ."
+                    return "❌ Модель gemini-pro не найдена. Проверьте ключ или попробуйте позже."
                 if resp.status != 200:
                     text = await resp.text()
                     logging.error(f"Gemini error: {resp.status} - {text}")
