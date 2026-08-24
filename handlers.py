@@ -11,17 +11,25 @@ from aiogram.types import (
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 
-from states import NewsForm, AdminEdit, ContactForm, CommentState
+from states import (
+    NewsForm, AdminEdit, ContactForm,
+    CommentState, BlackjackState, QuizState
+)
 from keyboards import (
-    skip_keyboard,
-    anonymous_keyboard,
-    admin_keyboard,
-    anonymous_choice_keyboard,
-    main_menu
+    skip_keyboard, anonymous_keyboard, admin_keyboard,
+    anonymous_choice_keyboard, main_menu
 )
 from video_maker import make_short_video
-from weather import get_weather
+from weather import get_weather, get_weather_data
+from weather_image import create_weather_card
 from database import get_db
+from games import (
+    play_rps, roll_dice, flip_coin, spin_wheel,
+    deal_card, hand_value, format_hand, blackjack_result,
+    get_blackjack_state, QUIZ_QUESTIONS, get_quiz_question,
+    check_quiz_answer
+)
+from ai_chat import ask_ai
 
 router = Router()
 
@@ -30,7 +38,7 @@ CHANNEL_ID = int(os.getenv("CHANNEL_ID", 0))
 
 pending_news = {}
 
-# ---- FAQ (Часто задаваемые вопросы) ----
+# ---- FAQ ----
 FAQ_DATA = {
     "Как предложить новость?": "Напишите /news или нажмите кнопку «📝 Предложить новость» в меню. Бот проведёт вас через все шаги.",
     "Как оставить комментарий?": "Под каждой новостью в канале есть кнопка «💬 Комментировать». Нажмите её, выберите анонимность и напишите текст.",
@@ -100,7 +108,7 @@ async def news_command(message: Message, state: FSMContext):
         reply_markup=skip_keyboard
     )
 
-# ---- ОБРАБОТЧИКИ ОПРОСА (NewsForm) ----
+# ---- ОПРОС НОВОСТИ (NewsForm) ----
 @router.message(NewsForm.media, F.photo | F.video)
 async def receive_media(message: Message, state: FSMContext):
     data = await state.get_data()
@@ -352,6 +360,7 @@ async def admin_action(callback: CallbackQuery, state: FSMContext):
 
             news_message_id = str(sent_msg.message_id)
 
+            # Кнопка комментариев
             await callback.bot.send_message(
                 chat_id=CHANNEL_ID,
                 text="💬 Оставьте свой комментарий к этой новости",
@@ -360,7 +369,7 @@ async def admin_action(callback: CallbackQuery, state: FSMContext):
                 ])
             )
 
-            # ---- ГЕНЕРАЦИЯ ВИДЕО ----
+            # ГЕНЕРАЦИЯ ВИДЕО
             try:
                 raw_text = news.get('text', 'Новость Уссурийска')
                 short_text = raw_text[:200] + ('...' if len(raw_text) > 200 else '')
@@ -495,7 +504,7 @@ async def contact_send(message: Message, state: FSMContext):
 async def contact_unknown(message: Message, state: FSMContext):
     await message.answer("Пожалуйста, отправьте текстовое сообщение.")
 
-# ---- ПОГОДА ----
+# ---- ПОГОДА (текст) ----
 @router.message(Command("weather"))
 async def weather_command(message: Message):
     weather_text = await get_weather()
@@ -584,3 +593,195 @@ async def faq_callback(callback: CallbackQuery):
     answer = FAQ_DATA.get(question, "Ответ не найден.")
     await callback.message.answer(f"📌 *{question}*\n\n{answer}", parse_mode="Markdown")
     await callback.answer()
+
+# ---- ИГРЫ ----
+
+# -------- 1. КАМЕНЬ-НОЖНИЦЫ-БУМАГА --------
+@router.message(Command("rps"))
+async def rps_command(message: Message):
+    await message.answer(
+        "✊ Камень, ножницы, бумага!\n"
+        "Напишите: `камень`, `ножницы` или `бумага`."
+    )
+
+@router.message(F.text.lower().in_(["камень", "ножницы", "бумага"]))
+async def rps_play(message: Message):
+    result = play_rps(message.text)
+    await message.answer(result)
+
+# -------- 2. КУБИК --------
+@router.message(Command("dice"))
+async def dice_command(message: Message):
+    args = message.text.split()
+    count = 1
+    if len(args) > 1:
+        try:
+            count = int(args[1])
+        except:
+            pass
+    result = roll_dice(count)
+    await message.answer(result)
+
+# -------- 3. ОРЁЛ ИЛИ РЕШКА --------
+@router.message(Command("coin"))
+async def coin_command(message: Message):
+    result = flip_coin()
+    await message.answer(result, parse_mode="Markdown")
+
+# -------- 4. КОЛЕСО ФОРТУНЫ --------
+@router.message(Command("spin"))
+async def spin_command(message: Message):
+    await message.answer(
+        "🎡 Введите варианты через запятую.\n"
+        "Пример: `/spin Китай, Япония, Корея`"
+    )
+
+@router.message(F.text.startswith("/spin"))
+async def spin_play(message: Message):
+    items = message.text.replace("/spin", "").strip()
+    result = spin_wheel(items)
+    await message.answer(result, parse_mode="Markdown")
+
+# -------- 5. БЛЕК-ДЖЕК (21) --------
+@router.message(Command("blackjack"))
+async def blackjack_start(message: Message, state: FSMContext):
+    player_hand = [deal_card(), deal_card()]
+    dealer_hand = [deal_card(), deal_card()]
+    await state.update_data(player_hand=player_hand, dealer_hand=dealer_hand, game_over=False)
+    await state.set_state(BlackjackState.waiting_for_action)
+    state_text = get_blackjack_state(player_hand, dealer_hand, game_over=False)
+    await message.answer(state_text)
+
+@router.message(BlackjackState.waiting_for_action, F.text.lower().in_(["взять", "стоп"]))
+async def blackjack_action(message: Message, state: FSMContext):
+    data = await state.get_data()
+    player_hand = data.get("player_hand", [])
+    dealer_hand = data.get("dealer_hand", [])
+    game_over = data.get("game_over", False)
+
+    if game_over:
+        await message.answer("Игра уже завершена. Начните новую командой /blackjack.")
+        return
+
+    action = message.text.lower()
+
+    if action == "взять":
+        player_hand.append(deal_card())
+        if hand_value(player_hand) > 21:
+            # Игрок перебрал
+            game_over = True
+            state_text = get_blackjack_state(player_hand, dealer_hand, game_over=True)
+            await message.answer(state_text)
+            await state.clear()
+            return
+        else:
+            state_text = get_blackjack_state(player_hand, dealer_hand, game_over=False)
+            await message.answer(state_text)
+
+    elif action == "стоп":
+        # Ход бота
+        while hand_value(dealer_hand) < 17:
+            dealer_hand.append(deal_card())
+        game_over = True
+        state_text = get_blackjack_state(player_hand, dealer_hand, game_over=True)
+        await message.answer(state_text)
+        await state.clear()
+        return
+
+    # Сохраняем обновлённое состояние
+    await state.update_data(player_hand=player_hand, dealer_hand=dealer_hand, game_over=game_over)
+
+@router.message(BlackjackState.waiting_for_action)
+async def blackjack_invalid(message: Message):
+    await message.answer("Пожалуйста, введите 'взять' или 'стоп'.")
+
+# -------- 6. ВИКТОРИНА --------
+@router.message(Command("quiz"))
+async def quiz_start(message: Message, state: FSMContext):
+    await state.update_data(quiz_index=0, quiz_score=0)
+    await state.set_state(QuizState.waiting_for_answer)
+    q_text, correct = get_quiz_question(0)
+    if q_text:
+        await message.answer(q_text)
+    else:
+        await message.answer("❌ Вопросы закончились.")
+
+@router.message(QuizState.waiting_for_answer, F.text)
+async def quiz_answer(message: Message, state: FSMContext):
+    data = await state.get_data()
+    index = data.get("quiz_index", 0)
+    score = data.get("quiz_score", 0)
+
+    try:
+        user_choice = int(message.text.strip()) - 1
+    except:
+        await message.answer("❌ Введите номер варианта (1, 2, 3, 4).")
+        return
+
+    if 0 <= user_choice < len(QUIZ_QUESTIONS[index]['options']):
+        correct = check_quiz_answer(index, user_choice)
+        if correct:
+            score += 1
+            await message.answer("✅ Правильно!")
+        else:
+            correct_ans = QUIZ_QUESTIONS[index]['options'][QUIZ_QUESTIONS[index]['answer']]
+            await message.answer(f"❌ Неправильно. Правильный ответ: {correct_ans}")
+
+        await state.update_data(quiz_score=score)
+        next_index = index + 1
+        if next_index < len(QUIZ_QUESTIONS):
+            await state.update_data(quiz_index=next_index)
+            q_text, _ = get_quiz_question(next_index)
+            await message.answer(q_text)
+        else:
+            await message.answer(f"🎉 Викторина завершена! Ваш счёт: {score} из {len(QUIZ_QUESTIONS)}.")
+            await state.clear()
+    else:
+        await message.answer("❌ Введите корректный номер варианта.")
+
+# ---- ИИ-ЧАТ (DeepSeek) ----
+@router.message(Command("ai"))
+async def ai_deepseek(message: Message):
+    prompt = message.text.replace("/ai", "").strip()
+    if not prompt:
+        await message.answer("❓ Напишите вопрос после команды /ai\nПример: `/ai Какой сегодня день?`")
+        return
+    await message.answer("🤔 Думаю через DeepSeek...")
+    response = await ask_ai(prompt, "deepseek")
+    await message.answer(response, parse_mode="Markdown")
+
+# ---- ИИ-ЧАТ (Gemini) ----
+@router.message(Command("gemini"))
+async def ai_gemini(message: Message):
+    prompt = message.text.replace("/gemini", "").strip()
+    if not prompt:
+        await message.answer("❓ Напишите вопрос после команды /gemini\nПример: `/gemini Какой сегодня день?`")
+        return
+    await message.answer("🤔 Думаю через Gemini...")
+    response = await ask_ai(prompt, "gemini")
+    await message.answer(response, parse_mode="Markdown")
+
+# ---- КНОПКИ МЕНЮ: ИГРЫ И ИИ ----
+@router.message(F.text == "🎲 Игры")
+async def games_menu(message: Message):
+    await message.answer(
+        "🎮 *Доступные игры:*\n\n"
+        "✊ `/rps` – Камень-ножницы-бумага\n"
+        "🎲 `/dice [количество]` – Бросить кубик (по умолчанию 1)\n"
+        "🪙 `/coin` – Орёл или решка\n"
+        "🎡 `/spin вариант1, вариант2, ...` – Колесо фортуны\n"
+        "🃏 `/blackjack` – Блек-джек (21)\n"
+        "❓ `/quiz` – Викторина",
+        parse_mode="Markdown"
+    )
+
+@router.message(F.text == "🤖 ИИ-чат")
+async def ai_menu(message: Message):
+    await message.answer(
+        "🤖 *ИИ-помощник*\n\n"
+        "Используйте команды:\n"
+        "`/ai вопрос` – спросить DeepSeek\n"
+        "`/gemini вопрос` – спросить Gemini\n\n"
+        "Пример: `/ai Что такое Уссурийск?`",
+        parse_mode="Markdown"
+    )
