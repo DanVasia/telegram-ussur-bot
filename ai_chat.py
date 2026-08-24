@@ -7,7 +7,7 @@ DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
-GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
 
 # ----------------- DEEPSEEK -----------------
 async def ask_deepseek(prompt: str) -> str:
@@ -32,10 +32,12 @@ async def ask_deepseek(prompt: str) -> str:
         async with aiohttp.ClientSession() as session:
             async with session.post(DEEPSEEK_URL, json=payload, headers=headers) as resp:
                 logging.info(f"DeepSeek status: {resp.status}")
+                if resp.status == 402:
+                    return "❌ Недостаточно средств на балансе DeepSeek. Пополните баланс или используйте /gemini."
                 if resp.status != 200:
                     text = await resp.text()
                     logging.error(f"DeepSeek error: {resp.status} - {text}")
-                    return f"❌ Ошибка DeepSeek (статус {resp.status}). Проверьте ключ и баланс."
+                    return f"❌ Ошибка DeepSeek (статус {resp.status})."
                 data = await resp.json()
                 if "choices" not in data or not data["choices"]:
                     logging.error(f"DeepSeek response без choices: {data}")
@@ -61,12 +63,13 @@ async def ask_gemini(prompt: str) -> str:
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=payload) as resp:
                 logging.info(f"Gemini status: {resp.status}")
+                if resp.status == 404:
+                    return "❌ Модель Gemini не найдена (404). Попробуйте другую модель или проверьте ключ."
                 if resp.status != 200:
                     text = await resp.text()
                     logging.error(f"Gemini error: {resp.status} - {text}")
-                    return f"❌ Ошибка Gemini (статус {resp.status}). Проверьте ключ."
+                    return f"❌ Ошибка Gemini (статус {resp.status})."
                 data = await resp.json()
-                # Проверка структуры ответа
                 if "candidates" not in data or not data["candidates"]:
                     logging.error(f"Gemini response без candidates: {data}")
                     return "❌ Неожиданный ответ от Gemini."
