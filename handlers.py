@@ -700,8 +700,7 @@ async def blackjack_action(message: Message, state: FSMContext):
 async def blackjack_invalid(message: Message):
     await message.answer("Пожалуйста, введите 'взять' или 'стоп'.")
 
-# -------- 6. ВИКТОРИНА (ОБНОВЛЁННАЯ: встроенная база + генерация ИИ) --------
-# --- Настройка викторины ---
+# -------- 6. ВИКТОРИНА (ОБНОВЛЁННАЯ) --------
 @router.message(Command("quiz"))
 async def quiz_start(message: Message, state: FSMContext):
     categories = get_quiz_categories()
@@ -726,7 +725,6 @@ async def quiz_start(message: Message, state: FSMContext):
 async def quiz_category_chosen(callback: CallbackQuery, state: FSMContext):
     cat = callback.data.split("_")[1]
     if cat == "ai":
-        # Выбрана генерация ИИ
         await state.update_data(category="ai")
         await state.set_state(QuizSetupState.choosing_difficulty)
         difficulty_buttons = InlineKeyboardMarkup(inline_keyboard=[
@@ -741,7 +739,7 @@ async def quiz_category_chosen(callback: CallbackQuery, state: FSMContext):
         )
         await callback.answer()
         return
-    # Обычная категория
+
     await state.update_data(category=cat if cat != "any" else None)
     await state.set_state(QuizSetupState.choosing_difficulty)
     difficulty_buttons = InlineKeyboardMarkup(inline_keyboard=[
@@ -757,7 +755,6 @@ async def quiz_category_chosen(callback: CallbackQuery, state: FSMContext):
 async def quiz_difficulty_chosen(callback: CallbackQuery, state: FSMContext):
     diff = callback.data.split("_")[1]
     await state.update_data(difficulty=diff)
-    # Если выбрана ИИ-генерация, сначала запросим тему
     data = await state.get_data()
     if data.get("category") == "ai":
         await state.set_state(QuizSetupState.waiting_for_topic)
@@ -766,7 +763,7 @@ async def quiz_difficulty_chosen(callback: CallbackQuery, state: FSMContext):
         )
         await callback.answer()
         return
-    # Обычный режим: выбираем количество
+
     await state.set_state(QuizSetupState.choosing_mode)
     mode_buttons = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="5 вопросов", callback_data="qmode_5"),
@@ -800,7 +797,6 @@ async def quiz_mode_chosen(callback: CallbackQuery, state: FSMContext):
     topic = data.get("topic")
 
     if category == "ai":
-        # Генерация через Gemini
         await callback.message.edit_text("⏳ Генерирую вопросы с помощью ИИ...")
         questions = await generate_quiz_questions_via_gemini(topic or "общие знания", amount)
         if not questions:
@@ -808,7 +804,6 @@ async def quiz_mode_chosen(callback: CallbackQuery, state: FSMContext):
             await state.clear()
             return
     else:
-        # Встроенная база
         questions = get_random_questions(amount=amount, category=category, difficulty=difficulty)
         if not questions:
             await callback.message.edit_text("❌ Нет вопросов с такими параметрами.")
@@ -822,7 +817,6 @@ async def quiz_mode_chosen(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(q_text)
     await callback.answer()
 
-# --- Обработка ответов викторины ---
 @router.message(QuizState.waiting_for_answer, F.text)
 async def quiz_answer(message: Message, state: FSMContext):
     data = await state.get_data()
@@ -909,4 +903,4 @@ async def ai_menu(message: Message):
         "`/gemini вопрос` – спросить Gemini\n\n"
         "Пример: `/ai Что такое Уссурийск?`",
         parse_mode="Markdown"
-                )
+    )
