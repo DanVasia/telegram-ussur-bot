@@ -27,3 +27,6 @@ class QuizSetupState(StatesGroup):
     choosing_category = State()
     choosing_difficulty = State()
     choosing_mode = State()
+
+class SpinState(StatesGroup):
+    waiting_for_items = State()
