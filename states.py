@@ -16,3 +16,9 @@ class ContactForm(StatesGroup):
 
 class CommentState(StatesGroup):
     waiting_for_text = State()
+
+class BlackjackState(StatesGroup):
+    waiting_for_action = State()
+
+class QuizState(StatesGroup):
+    waiting_for_answer = State()
