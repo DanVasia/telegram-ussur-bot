@@ -3,37 +3,52 @@ import logging
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from aiogram import Bot
-from weather import get_weather
+from weather import get_weather_data
+from weather_image import create_weather_card
 
 CHANNEL_ID = int(os.getenv("CHANNEL_ID", 0))
 
-async def send_daily_weather(bot: Bot):
+async def send_weather_card(bot: Bot):
     if not CHANNEL_ID:
         logging.warning("CHANNEL_ID не настроен, погода не отправляется.")
         return
-    weather_text = await get_weather()
-    await bot.send_message(chat_id=CHANNEL_ID, text=weather_text, parse_mode="Markdown")
-    logging.info("Daily weather sent to channel.")
+    data = await get_weather_data()
+    if not data:
+        return
+
+    image_bytes = await create_weather_card(data)
+
+    caption = (
+        f"🌤 *Погода в Уссурийске*\n"
+        f"Температура: {data['temp']:.1f}°C\n"
+        f"Ощущается как: {data['feels_like']:.1f}°C\n"
+        f"💧 Влажность: {data['humidity']}%\n"
+        f"💨 Ветер: {data['wind']} м/с\n"
+        f"📖 {data['description'].capitalize()}"
+    )
+
+    await bot.send_photo(
+        chat_id=CHANNEL_ID,
+        photo=image_bytes,
+        caption=caption,
+        parse_mode="Markdown"
+    )
+    logging.info("Weather card sent to channel.")
 
 def setup_scheduler(bot: Bot):
     scheduler = AsyncIOScheduler(timezone="Asia/Vladivostok")
-    
-    # 7:00 – утренняя погода
     scheduler.add_job(
-        send_daily_weather,
+        send_weather_card,
         trigger=CronTrigger(hour=7, minute=0),
         args=[bot],
-        id="daily_weather_7am"
+        id="weather_7am"
     )
-    
-    # 21:00 – вечерняя погода
     scheduler.add_job(
-        send_daily_weather,
+        send_weather_card,
         trigger=CronTrigger(hour=21, minute=0),
         args=[bot],
-        id="daily_weather_9pm"
+        id="weather_9pm"
     )
-    
     scheduler.start()
-    logging.info("Scheduler started – daily weather at 7:00 and 21:00 (UTC+10)")
+    logging.info("Scheduler started – weather cards at 7:00 and 21:00 (UTC+10)")
     return scheduler
