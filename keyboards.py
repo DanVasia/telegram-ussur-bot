@@ -13,6 +13,17 @@ skip_keyboard = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
+# ГЛАВНОЕ МЕНЮ
+main_menu = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="📝 Предложить новость")],
+        [KeyboardButton(text="🌤 Погода"), KeyboardButton(text="📩 Связаться с админом")],
+        [KeyboardButton(text="❓ Частые вопросы"), KeyboardButton(text="🎲 Игры")],
+        [KeyboardButton(text="🤖 ИИ-чат")]
+    ],
+    resize_keyboard=True
+)
+
 # ---- ИНЛАЙН-КЛАВИАТУРЫ ----
 
 # Анонимность новости
@@ -25,7 +36,7 @@ anonymous_keyboard = InlineKeyboardMarkup(
     ]
 )
 
-# Админская клавиатура (публикация / редактирование / отклонение)
+# Админская клавиатура
 admin_keyboard = InlineKeyboardMarkup(
     inline_keyboard=[
         [
@@ -44,14 +55,4 @@ anonymous_choice_keyboard = InlineKeyboardMarkup(
             InlineKeyboardButton(text="👤 С именем", callback_data="comment_anon_no")
         ]
     ]
-)
-
-# ---- ГЛАВНОЕ МЕНЮ (ReplyKeyboard) ----
-main_menu = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text="📝 Предложить новость")],
-        [KeyboardButton(text="🌤 Погода"), KeyboardButton(text="📩 Связаться с админом")],
-        [KeyboardButton(text="❓ Частые вопросы")]
-    ],
-    resize_keyboard=True
 )
