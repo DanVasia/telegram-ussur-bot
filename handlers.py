@@ -13,7 +13,7 @@ from aiogram.fsm.context import FSMContext
 
 from states import (
     NewsForm, AdminEdit, ContactForm,
-    CommentState, BlackjackState, QuizState
+    CommentState, BlackjackState, QuizState, QuizSetupState
 )
 from keyboards import (
     skip_keyboard, anonymous_keyboard, admin_keyboard,
@@ -27,7 +27,8 @@ from games import (
     play_rps, roll_dice, flip_coin, spin_wheel,
     deal_card, hand_value, format_hand, blackjack_result,
     get_blackjack_state, QUIZ_QUESTIONS, get_quiz_question,
-    check_quiz_answer
+    check_quiz_answer, fetch_categories, fetch_quiz_questions,
+    format_question
 )
 from ai_chat import ask_ai
 
@@ -43,7 +44,7 @@ FAQ_DATA = {
     "Как предложить новость?": "Напишите /news или нажмите кнопку «📝 Предложить новость» в меню. Бот проведёт вас через все шаги.",
     "Как оставить комментарий?": "Под каждой новостью в канале есть кнопка «💬 Комментировать». Нажмите её, выберите анонимность и напишите текст.",
     "Анонимно ли это?": "Да, вы можете публиковать новости и комментарии анонимно. При отправке новости вы выбираете «Анонимно» или «С именем». Для комментариев тоже есть выбор.",
-    "Как связаться с админом?": "Напишите /contact или нажмите кнопку «📩 Связаться с админом» в меню. Ваше сообщение будет переслано администратору.",
+    "Как связаться с админом?": "Напишите /contact или нажмите кнопку «📩 Связываться с админом» в меню. Ваше сообщение будет переслано администратору.",
     "Где посмотреть погоду?": "Напишите /weather или нажмите кнопку «🌤 Погода» в меню. Также мы публикуем прогноз в канале каждое утро и вечер.",
 }
 
@@ -315,7 +316,7 @@ async def admin_action(callback: CallbackQuery, state: FSMContext):
                     url="https://t.me/PodslUssurBot?start=news"
                 ),
                 InlineKeyboardButton(
-                    text="📩 Связь с админом",
+                    text="📩 Связаться с админом",
                     url="https://t.me/PodslUssurBot"
                 )
             ]
@@ -628,19 +629,29 @@ async def coin_command(message: Message):
     result = flip_coin()
     await message.answer(result, parse_mode="Markdown")
 
-# -------- 4. КОЛЕСО ФОРТУНЫ --------
+# -------- 4. КОЛЕСО ФОРТУНЫ (обновлённое) --------
 @router.message(Command("spin"))
-async def spin_command(message: Message):
-    await message.answer(
-        "🎡 Введите варианты через запятую.\n"
-        "Пример: `/spin Китай, Япония, Корея`"
-    )
+async def spin_command(message: Message, state: FSMContext):
+    args = message.text.replace("/spin", "").strip()
+    if args:
+        # Если варианты указаны сразу
+        result = spin_wheel(args)
+        await message.answer(result, parse_mode="Markdown")
+    else:
+        # Если команда без вариантов – просим ввести
+        await state.set_state("waiting_for_spin_items")
+        await message.answer(
+            "🎡 Введите варианты через запятую.\n"
+            "Например: `Китай, Япония, Корея`",
+            parse_mode="Markdown"
+        )
 
-@router.message(F.text.startswith("/spin"))
-async def spin_play(message: Message):
-    items = message.text.replace("/spin", "").strip()
+@router.message(F.text, lambda m: m.state == "waiting_for_spin_items")
+async def spin_items_received(message: Message, state: FSMContext):
+    items = message.text
     result = spin_wheel(items)
     await message.answer(result, parse_mode="Markdown")
+    await state.clear()
 
 # -------- 5. БЛЕК-ДЖЕК (21) --------
 @router.message(Command("blackjack"))
@@ -668,7 +679,6 @@ async def blackjack_action(message: Message, state: FSMContext):
     if action == "взять":
         player_hand.append(deal_card())
         if hand_value(player_hand) > 21:
-            # Игрок перебрал
             game_over = True
             state_text = get_blackjack_state(player_hand, dealer_hand, game_over=True)
             await message.answer(state_text)
@@ -679,7 +689,6 @@ async def blackjack_action(message: Message, state: FSMContext):
             await message.answer(state_text)
 
     elif action == "стоп":
-        # Ход бота
         while hand_value(dealer_hand) < 17:
             dealer_hand.append(deal_card())
         game_over = True
@@ -688,29 +697,95 @@ async def blackjack_action(message: Message, state: FSMContext):
         await state.clear()
         return
 
-    # Сохраняем обновлённое состояние
     await state.update_data(player_hand=player_hand, dealer_hand=dealer_hand, game_over=game_over)
 
 @router.message(BlackjackState.waiting_for_action)
 async def blackjack_invalid(message: Message):
     await message.answer("Пожалуйста, введите 'взять' или 'стоп'.")
 
-# -------- 6. ВИКТОРИНА --------
+# -------- 6. ВИКТОРИНА (обновлённая) --------
+# --- Настройка викторины ---
 @router.message(Command("quiz"))
 async def quiz_start(message: Message, state: FSMContext):
-    await state.update_data(quiz_index=0, quiz_score=0)
-    await state.set_state(QuizState.waiting_for_answer)
-    q_text, correct = get_quiz_question(0)
-    if q_text:
-        await message.answer(q_text)
-    else:
-        await message.answer("❌ Вопросы закончились.")
+    categories = await fetch_categories()
+    if not categories:
+        await message.answer("❌ Не удалось загрузить категории. Попробуйте позже.")
+        return
 
+    await state.update_data(categories=categories)
+    await state.set_state(QuizSetupState.choosing_category)
+
+    buttons = []
+    for cat in categories[:10]:  # показываем первые 10
+        buttons.append([InlineKeyboardButton(text=cat["name"], callback_data=f"qcat_{cat['id']}")])
+    buttons.append([InlineKeyboardButton(text="📌 Любая", callback_data="qcat_any")])
+    await message.answer(
+        "Выберите категорию викторины:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+    )
+
+@router.callback_query(QuizSetupState.choosing_category, F.data.startswith("qcat_"))
+async def quiz_category_chosen(callback: CallbackQuery, state: FSMContext):
+    cat_id = callback.data.split("_")[1]
+    await state.update_data(category=cat_id if cat_id != "any" else None)
+    await state.set_state(QuizSetupState.choosing_difficulty)
+
+    difficulty_buttons = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🟢 Лёгкая", callback_data="qdiff_easy"),
+         InlineKeyboardButton(text="🟡 Средняя", callback_data="qdiff_medium")],
+        [InlineKeyboardButton(text="🔴 Сложная", callback_data="qdiff_hard"),
+         InlineKeyboardButton(text="📌 Любая", callback_data="qdiff_any")]
+    ])
+    await callback.message.edit_text("Выберите сложность:", reply_markup=difficulty_buttons)
+    await callback.answer()
+
+@router.callback_query(QuizSetupState.choosing_difficulty, F.data.startswith("qdiff_"))
+async def quiz_difficulty_chosen(callback: CallbackQuery, state: FSMContext):
+    diff = callback.data.split("_")[1]
+    diff_map = {"easy": "easy", "medium": "medium", "hard": "hard", "any": None}
+    await state.update_data(difficulty=diff_map.get(diff))
+    await state.set_state(QuizSetupState.choosing_mode)
+
+    mode_buttons = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="5 вопросов", callback_data="qmode_5"),
+         InlineKeyboardButton(text="10 вопросов", callback_data="qmode_10")],
+        [InlineKeyboardButton(text="15 вопросов", callback_data="qmode_15")]
+    ])
+    await callback.message.edit_text("Сколько вопросов хотите получить?", reply_markup=mode_buttons)
+    await callback.answer()
+
+@router.callback_query(QuizSetupState.choosing_mode, F.data.startswith("qmode_"))
+async def quiz_mode_chosen(callback: CallbackQuery, state: FSMContext):
+    amount = int(callback.data.split("_")[1])
+    data = await state.get_data()
+    category = data.get("category")
+    difficulty = data.get("difficulty")
+
+    questions = await fetch_quiz_questions(amount=amount, category=category, difficulty=difficulty)
+    if not questions:
+        await callback.message.edit_text("❌ Не удалось загрузить вопросы. Попробуйте позже.")
+        await state.clear()
+        return
+
+    await state.update_data(quiz_questions=questions, quiz_index=0, quiz_score=0)
+    await state.set_state(QuizState.waiting_for_answer)
+
+    q_text, _ = format_question(questions[0])
+    await callback.message.edit_text(q_text)
+    await callback.answer()
+
+# --- Обработка ответов викторины ---
 @router.message(QuizState.waiting_for_answer, F.text)
 async def quiz_answer(message: Message, state: FSMContext):
     data = await state.get_data()
+    questions = data.get("quiz_questions", [])
     index = data.get("quiz_index", 0)
     score = data.get("quiz_score", 0)
+
+    if not questions or index >= len(questions):
+        await message.answer("Викторина завершена. Начните новую через /quiz.")
+        await state.clear()
+        return
 
     try:
         user_choice = int(message.text.strip()) - 1
@@ -718,26 +793,28 @@ async def quiz_answer(message: Message, state: FSMContext):
         await message.answer("❌ Введите номер варианта (1, 2, 3, 4).")
         return
 
-    if 0 <= user_choice < len(QUIZ_QUESTIONS[index]['options']):
-        correct = check_quiz_answer(index, user_choice)
-        if correct:
-            score += 1
-            await message.answer("✅ Правильно!")
-        else:
-            correct_ans = QUIZ_QUESTIONS[index]['options'][QUIZ_QUESTIONS[index]['answer']]
-            await message.answer(f"❌ Неправильно. Правильный ответ: {correct_ans}")
-
-        await state.update_data(quiz_score=score)
-        next_index = index + 1
-        if next_index < len(QUIZ_QUESTIONS):
-            await state.update_data(quiz_index=next_index)
-            q_text, _ = get_quiz_question(next_index)
-            await message.answer(q_text)
-        else:
-            await message.answer(f"🎉 Викторина завершена! Ваш счёт: {score} из {len(QUIZ_QUESTIONS)}.")
-            await state.clear()
-    else:
+    if user_choice < 0 or user_choice >= len(questions[index]["options"]):
         await message.answer("❌ Введите корректный номер варианта.")
+        return
+
+    _, correct_index = format_question(questions[index])
+    if user_choice == correct_index:
+        score += 1
+        await message.answer("✅ Правильно!")
+    else:
+        correct_text = questions[index]["correct_answer"]
+        await message.answer(f"❌ Неправильно. Правильный ответ: {correct_text}")
+
+    await state.update_data(quiz_score=score)
+    next_index = index + 1
+
+    if next_index < len(questions):
+        await state.update_data(quiz_index=next_index)
+        q_text, _ = format_question(questions[next_index])
+        await message.answer(q_text)
+    else:
+        await message.answer(f"🎉 Викторина завершена! Ваш счёт: {score} из {len(questions)}.")
+        await state.clear()
 
 # ---- ИИ-ЧАТ (DeepSeek) ----
 @router.message(Command("ai"))
@@ -771,7 +848,7 @@ async def games_menu(message: Message):
         "🪙 `/coin` – Орёл или решка\n"
         "🎡 `/spin вариант1, вариант2, ...` – Колесо фортуны\n"
         "🃏 `/blackjack` – Блек-джек (21)\n"
-        "❓ `/quiz` – Викторина",
+        "❓ `/quiz` – Викторина с выбором категории и сложности",
         parse_mode="Markdown"
     )
 
