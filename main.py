@@ -22,7 +22,6 @@ async def health_check(request):
     return web.Response(text="OK")
 
 async def ping(request):
-    # Возвращаем минимальный ответ для cron-job.org
     return web.Response(text="OK", content_type="text/plain")
 
 async def start_bot():
@@ -31,7 +30,15 @@ async def start_bot():
         types.BotCommand(command="news", description="📝 Написать новость"),
         types.BotCommand(command="contact", description="📩 Связаться с админом"),
         types.BotCommand(command="weather", description="🌤 Погода"),
-        types.BotCommand(command="faq", description="❓ Частые вопросы")
+        types.BotCommand(command="faq", description="❓ Частые вопросы"),
+        types.BotCommand(command="rps", description="✊ Камень-ножницы-бумага"),
+        types.BotCommand(command="dice", description="🎲 Бросить кубик"),
+        types.BotCommand(command="coin", description="🪙 Орёл или решка"),
+        types.BotCommand(command="spin", description="🎡 Колесо фортуны"),
+        types.BotCommand(command="blackjack", description="🃏 Блек-джек (21)"),
+        types.BotCommand(command="quiz", description="❓ Викторина"),
+        types.BotCommand(command="ai", description="🤖 Спросить DeepSeek"),
+        types.BotCommand(command="gemini", description="🧠 Спросить Gemini")
     ])
     logging.info("Commands set")
 
@@ -46,24 +53,20 @@ async def start_bot():
             await asyncio.sleep(10)
 
 async def main():
-    # Инициализация базы данных
     init_db()
     logging.info("Database initialized")
 
-    # Запускаем веб-сервер
     app = web.Application()
     app.router.add_get("/", health_check)
-    app.router.add_get("/ping", ping)          # <-- новый эндпоинт
+    app.router.add_get("/ping", ping)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
     await site.start()
     logging.info("Health check server running on port 10000")
 
-    # Запускаем планировщик (погода)
     scheduler = setup_scheduler(bot)
 
-    # Запускаем бота
     await start_bot()
 
 if __name__ == "__main__":
