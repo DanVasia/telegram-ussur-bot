@@ -27,7 +27,10 @@ class QuizSetupState(StatesGroup):
     choosing_category = State()
     choosing_difficulty = State()
     choosing_mode = State()
-    waiting_for_topic = State()   # обязательно!
 
 class SpinState(StatesGroup):
     waiting_for_items = State()
+
+# ---- ДЛЯ ОТВЕТА АДМИНА ЧЕРЕЗ КНОПКУ "Ответить" ----
+class AdminReplyState(StatesGroup):
+    waiting_for_reply_text = State()
