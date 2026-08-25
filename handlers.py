@@ -13,7 +13,8 @@ from aiogram.fsm.context import FSMContext
 
 from states import (
     NewsForm, AdminEdit, ContactForm,
-    CommentState, BlackjackState, QuizState, QuizSetupState, SpinState
+    CommentState, BlackjackState, QuizState, QuizSetupState,
+    SpinState, AdminReplyState
 )
 from keyboards import (
     skip_keyboard, anonymous_keyboard, admin_keyboard,
@@ -468,7 +469,7 @@ async def receive_new_text(message: Message, state: FSMContext):
     await message.answer("✅ Текст обновлён.")
     await state.clear()
 
-# ---- КОНТАКТ ----
+# ---- КОНТАКТ (с кнопкой "Ответить" для админа) ----
 @router.message(Command("contact"))
 async def contact_start(message: Message, state: FSMContext):
     await state.set_state(ContactForm.waiting_for_message)
@@ -483,16 +484,24 @@ async def contact_send(message: Message, state: FSMContext):
     username = message.from_user.username or "без username"
     text = message.text
 
+    # Сохраняем данные для ответа
     admin_text = (
         f"📩 *Сообщение от пользователя*\n"
         f"ID: `{user_id}`\n"
         f"Username: @{username}\n\n"
         f"Сообщение:\n{text}"
     )
+
+    # Создаём кнопку "Ответить"
+    reply_button = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✏️ Ответить", callback_data=f"reply_{user_id}")]
+    ])
+
     await message.bot.send_message(
         chat_id=ADMIN_ID,
         text=admin_text,
-        parse_mode="Markdown"
+        parse_mode="Markdown",
+        reply_markup=reply_button
     )
 
     await message.answer("✅ Ваше сообщение отправлено. Мы свяжемся с вами.")
@@ -501,6 +510,36 @@ async def contact_send(message: Message, state: FSMContext):
 @router.message(ContactForm.waiting_for_message)
 async def contact_unknown(message: Message, state: FSMContext):
     await message.answer("Пожалуйста, отправьте текстовое сообщение.")
+
+# ---- ОТВЕТ АДМИНА (через инлайн-кнопку) ----
+@router.callback_query(F.data.startswith("reply_"))
+async def reply_callback(callback: CallbackQuery, state: FSMContext):
+    user_id = int(callback.data.split("_")[1])
+    await state.update_data(reply_user_id=user_id)
+    await state.set_state(AdminReplyState.waiting_for_reply_text)
+    await callback.message.answer("✍️ Напишите текст ответа для этого пользователя.")
+    await callback.answer()
+
+@router.message(AdminReplyState.waiting_for_reply_text, F.text)
+async def send_reply(message: Message, state: FSMContext):
+    data = await state.get_data()
+    user_id = data.get("reply_user_id")
+    if not user_id:
+        await message.answer("❌ Ошибка: пользователь не найден.")
+        await state.clear()
+        return
+
+    reply_text = message.text
+    try:
+        await message.bot.send_message(
+            chat_id=user_id,
+            text=f"📩 *Ответ администратора:*\n{reply_text}",
+            parse_mode="Markdown"
+        )
+        await message.answer(f"✅ Ответ отправлен пользователю {user_id}.")
+    except Exception as e:
+        await message.answer(f"❌ Ошибка: {e}. Возможно, пользователь не начал чат с ботом.")
+    await state.clear()
 
 # ---- ПОГОДА (команда и кнопка) ----
 @router.message(Command("weather"))
@@ -828,4 +867,4 @@ async def games_button(message: Message):
         "🃏 `/blackjack` – Блек-джек (21)\n"
         "❓ `/quiz` – Викторина",
         parse_mode="Markdown"
-)
+    )
