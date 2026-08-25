@@ -6,27 +6,21 @@ from aiogram.types import (
 )
 
 # ---- РЕПЛИ-КЛАВИАТУРЫ ----
-
-# "Пропустить"
 skip_keyboard = ReplyKeyboardMarkup(
     keyboard=[[KeyboardButton(text="Пропустить")]],
     resize_keyboard=True
 )
 
-# ГЛАВНОЕ МЕНЮ
 main_menu = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📝 Предложить новость")],
         [KeyboardButton(text="🌤 Погода"), KeyboardButton(text="📩 Связаться с админом")],
         [KeyboardButton(text="❓ Частые вопросы"), KeyboardButton(text="🎲 Игры")],
-        [KeyboardButton(text="🤖 ИИ-чат")]
     ],
     resize_keyboard=True
 )
 
 # ---- ИНЛАЙН-КЛАВИАТУРЫ ----
-
-# Анонимность новости
 anonymous_keyboard = InlineKeyboardMarkup(
     inline_keyboard=[
         [
@@ -36,7 +30,6 @@ anonymous_keyboard = InlineKeyboardMarkup(
     ]
 )
 
-# Админская клавиатура
 admin_keyboard = InlineKeyboardMarkup(
     inline_keyboard=[
         [
@@ -47,7 +40,6 @@ admin_keyboard = InlineKeyboardMarkup(
     ]
 )
 
-# Выбор анонимности для комментария
 anonymous_choice_keyboard = InlineKeyboardMarkup(
     inline_keyboard=[
         [
