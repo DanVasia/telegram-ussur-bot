@@ -1,10 +1,6 @@
 import random
-import re
-import json
-from urllib.parse import unquote
-from ai_chat import ask_ai  # импортируем функцию для запросов к ИИ
 
-# ---------- 1. КАМЕНЬ-НОЖНИЦЫ-БУМАГА ----------
+# ---------- КАМЕНЬ-НОЖНИЦЫ-БУМАГА ----------
 RPS_CHOICES = ["камень", "ножницы", "бумага"]
 RPS_EMOJI = {"камень": "✊", "ножницы": "✌️", "бумага": "✋"}
 
@@ -25,19 +21,19 @@ def play_rps(user_choice: str) -> str:
         result = "😔 Вы проиграли."
     return f"{user_emoji} Вы: {user_choice}\n{bot_emoji} Бот: {bot_choice}\n\n{result}"
 
-# ---------- 2. КУБИК ----------
+# ---------- КУБИК ----------
 def roll_dice(count: int = 1) -> str:
     count = max(1, min(count, 10))
     results = [random.randint(1, 6) for _ in range(count)]
     return f"🎲 Результаты: {', '.join(map(str, results))}\nСумма: {sum(results)}"
 
-# ---------- 3. ОРЁЛ ИЛИ РЕШКА ----------
+# ---------- ОРЁЛ ИЛИ РЕШКА ----------
 def flip_coin() -> str:
     result = random.choice(["Орёл", "Решка"])
     emoji = "🦅" if result == "Орёл" else "🪙"
     return f"{emoji} Выпало: **{result}**"
 
-# ---------- 4. КОЛЕСО ФОРТУНЫ ----------
+# ---------- КОЛЕСО ФОРТУНЫ ----------
 def spin_wheel(items: str) -> str:
     items_list = [x.strip() for x in items.split(',') if x.strip()]
     if len(items_list) < 2:
@@ -45,7 +41,7 @@ def spin_wheel(items: str) -> str:
     chosen = random.choice(items_list)
     return f"🎡 Колесо выбрало: **{chosen}**"
 
-# ---------- 5. БЛЕК-ДЖЕК (21) ----------
+# ---------- БЛЕК-ДЖЕК (21) ----------
 DECK = [2,3,4,5,6,7,8,9,10,10,10,10,11]
 
 def deal_card():
@@ -85,108 +81,43 @@ def get_blackjack_state(player_hand, dealer_hand, game_over=False):
     else:
         return f"Ваши карты: {format_hand(player_hand)} ({hand_value(player_hand)})\nКарта бота: {card_emoji(dealer_hand[0])} + ?\n\nВведите 'взять' или 'стоп'."
 
-# ---------- 6. ВИКТОРИНА (ВСТРОЕННАЯ РУССКАЯ БАЗА) ----------
+# ---------- ВИКТОРИНА (ВСТРОЕННАЯ БАЗА) ----------
 RUSSIAN_QUIZ = [
-    # Категория: География
-    {
-        "question": "Какой океан самый большой?",
-        "options": ["Атлантический", "Индийский", "Тихий", "Северный Ледовитый"],
-        "answer": 2,
-        "category": "География",
-        "difficulty": "easy"
-    },
-    {
-        "question": "Какая страна занимает первое место по площади?",
-        "options": ["США", "Китай", "Россия", "Канада"],
-        "answer": 2,
-        "category": "География",
-        "difficulty": "easy"
-    },
-    {
-        "question": "Как называется столица Австралии?",
-        "options": ["Сидней", "Мельбурн", "Канберра", "Перт"],
-        "answer": 2,
-        "category": "География",
-        "difficulty": "medium"
-    },
-    {
-        "question": "Самая длинная река в мире?",
-        "options": ["Амазонка", "Нил", "Миссисипи", "Янцзы"],
-        "answer": 1,
-        "category": "География",
-        "difficulty": "medium"
-    },
-    # Категория: История
-    {
-        "question": "В каком году распался СССР?",
-        "options": ["1989", "1990", "1991", "1992"],
-        "answer": 2,
-        "category": "История",
-        "difficulty": "easy"
-    },
-    {
-        "question": "Кто открыл Америку?",
-        "options": ["Магеллан", "Колумб", "Васко да Гама", "Кук"],
-        "answer": 1,
-        "category": "История",
-        "difficulty": "easy"
-    },
-    {
-        "question": "Первая мировая война началась в ...",
-        "options": ["1914", "1915", "1916", "1917"],
-        "answer": 0,
-        "category": "История",
-        "difficulty": "medium"
-    },
-    # Категория: Уссурийск
-    {
-        "question": "В каком году основан Уссурийск?",
-        "options": ["1860", "1866", "1870", "1880"],
-        "answer": 1,
-        "category": "Уссурийск",
-        "difficulty": "medium"
-    },
-    {
-        "question": "Как назывался Уссурийск до 1935 года?",
-        "options": ["Никольск", "Никольск-Уссурийский", "Уссурийск", "Ворошилов"],
-        "answer": 1,
-        "category": "Уссурийск",
-        "difficulty": "hard"
-    },
-    {
-        "question": "Какая река протекает через Уссурийск?",
-        "options": ["Амур", "Уссури", "Раздольная", "Суйфун"],
-        "answer": 1,
-        "category": "Уссурийск",
-        "difficulty": "easy"
-    },
-    # Категория: Общие знания
-    {
-        "question": "Сколько планет в Солнечной системе?",
-        "options": ["7", "8", "9", "10"],
-        "answer": 1,
-        "category": "Общие знания",
-        "difficulty": "easy"
-    },
-    {
-        "question": "Кто написал 'Евгения Онегина'?",
-        "options": ["Толстой", "Достоевский", "Пушкин", "Чехов"],
-        "answer": 2,
-        "category": "Общие знания",
-        "difficulty": "easy"
-    },
-    {
-        "question": "Какой химический элемент самый распространённый на Земле?",
-        "options": ["Водород", "Кислород", "Азот", "Углерод"],
-        "answer": 0,
-        "category": "Общие знания",
-        "difficulty": "hard"
-    }
+    # География
+    {"question": "Какой океан самый большой?", "options": ["Атлантический", "Индийский", "Тихий", "Северный Ледовитый"], "answer": 2, "category": "География", "difficulty": "easy"},
+    {"question": "Какая страна занимает первое место по площади?", "options": ["США", "Китай", "Россия", "Канада"], "answer": 2, "category": "География", "difficulty": "easy"},
+    {"question": "Как называется столица Австралии?", "options": ["Сидней", "Мельбурн", "Канберра", "Перт"], "answer": 2, "category": "География", "difficulty": "medium"},
+    {"question": "Самая длинная река в мире?", "options": ["Амазонка", "Нил", "Миссисипи", "Янцзы"], "answer": 1, "category": "География", "difficulty": "medium"},
+    {"question": "Самый высокий водопад в мире?", "options": ["Ниагарский", "Анхель", "Виктория", "Игуасу"], "answer": 1, "category": "География", "difficulty": "hard"},
+    {"question": "Какое озеро самое глубокое в мире?", "options": ["Байкал", "Танганьика", "Виктория", "Верхнее"], "answer": 0, "category": "География", "difficulty": "medium"},
+    {"question": "Столица Канады?", "options": ["Торонто", "Оттава", "Ванкувер", "Монреаль"], "answer": 1, "category": "География", "difficulty": "easy"},
+    # История
+    {"question": "В каком году распался СССР?", "options": ["1989", "1990", "1991", "1992"], "answer": 2, "category": "История", "difficulty": "easy"},
+    {"question": "Кто открыл Америку?", "options": ["Магеллан", "Колумб", "Васко да Гама", "Кук"], "answer": 1, "category": "История", "difficulty": "easy"},
+    {"question": "Первая мировая война началась в ...", "options": ["1914", "1915", "1916", "1917"], "answer": 0, "category": "История", "difficulty": "medium"},
+    {"question": "Кто был первым президентом России?", "options": ["Горбачёв", "Ельцин", "Путин", "Медведев"], "answer": 1, "category": "История", "difficulty": "easy"},
+    {"question": "В каком году состоялась Октябрьская революция?", "options": ["1917", "1918", "1919", "1920"], "answer": 0, "category": "История", "difficulty": "medium"},
+    {"question": "Кто основал Москву?", "options": ["Иван Калита", "Юрий Долгорукий", "Александр Невский", "Дмитрий Донской"], "answer": 1, "category": "История", "difficulty": "hard"},
+    # Уссурийск
+    {"question": "В каком году основан Уссурийск?", "options": ["1860", "1866", "1870", "1880"], "answer": 1, "category": "Уссурийск", "difficulty": "medium"},
+    {"question": "Как назывался Уссурийск до 1935 года?", "options": ["Никольск", "Никольск-Уссурийский", "Уссурийск", "Ворошилов"], "answer": 1, "category": "Уссурийск", "difficulty": "hard"},
+    {"question": "Какая река протекает через Уссурийск?", "options": ["Амур", "Уссури", "Раздольная", "Суйфун"], "answer": 1, "category": "Уссурийск", "difficulty": "easy"},
+    {"question": "В каком году Уссурийск получил статус города?", "options": ["1898", "1900", "1902", "1905"], "answer": 0, "category": "Уссурийск", "difficulty": "medium"},
+    {"question": "Какая площадь является центральной в Уссурийске?", "options": ["Площадь Ленина", "Площадь Бородинская", "Площадь Калинина", "Площадь Пушкина"], "answer": 0, "category": "Уссурийск", "difficulty": "easy"},
+    {"question": "Какой театр есть в Уссурийске?", "options": ["Драматический театр", "Театр кукол", "Театр оперы и балета", "ТЮЗ"], "answer": 0, "category": "Уссурийск", "difficulty": "easy"},
+    {"question": "Какой парк самый известный в Уссурийске?", "options": ["Парк Дружбы", "Парк Победы", "Центральный парк", "Парк Горького"], "answer": 1, "category": "Уссурийск", "difficulty": "easy"},
+    {"question": "Какое предприятие является градообразующим в Уссурийске?", "options": ["Уссурийский ЛВЗ", "Уссурийский машиностроительный завод", "Уссурийский авиаремонтный завод", "Уссурийский мясокомбинат"], "answer": 2, "category": "Уссурийск", "difficulty": "hard"},
+    # Общие знания
+    {"question": "Сколько планет в Солнечной системе?", "options": ["7", "8", "9", "10"], "answer": 1, "category": "Общие знания", "difficulty": "easy"},
+    {"question": "Кто написал 'Евгения Онегина'?", "options": ["Толстой", "Достоевский", "Пушкин", "Чехов"], "answer": 2, "category": "Общие знания", "difficulty": "easy"},
+    {"question": "Какой химический элемент самый распространённый на Земле?", "options": ["Водород", "Кислород", "Азот", "Углерод"], "answer": 0, "category": "Общие знания", "difficulty": "hard"},
+    {"question": "Самая маленькая страна в мире?", "options": ["Монако", "Ватикан", "Сан-Марино", "Лихтенштейн"], "answer": 1, "category": "Общие знания", "difficulty": "medium"},
+    {"question": "Сколько хромосом у человека?", "options": ["44", "46", "48", "50"], "answer": 1, "category": "Общие знания", "difficulty": "easy"},
+    {"question": "Какой газ составляет основную часть атмосферы Земли?", "options": ["Кислород", "Азот", "Углекислый газ", "Аргон"], "answer": 1, "category": "Общие знания", "difficulty": "easy"},
 ]
 
 def get_quiz_categories():
-    categories = set(q["category"] for q in RUSSIAN_QUIZ)
-    return sorted(list(categories))
+    return sorted({q["category"] for q in RUSSIAN_QUIZ})
 
 def get_questions_by_filter(category=None, difficulty=None):
     filtered = RUSSIAN_QUIZ
@@ -209,35 +140,3 @@ def format_question(question_data):
     for i, opt in enumerate(question_data['options']):
         text += f"{i+1}. {opt}\n"
     return text, question_data['answer']
-
-# ---------- 7. ГЕНЕРАЦИЯ ВОПРОСОВ ЧЕРЕЗ GEMINI ----------
-async def generate_quiz_questions_via_gemini(topic: str, count: int = 10) -> list:
-    """
-    Генерирует вопросы через Gemini на заданную тему.
-    Возвращает список словарей с полями: question, options, answer.
-    """
-    prompt = (
-        f"Сгенерируй {count} интересных вопросов с 4 вариантами ответов на тему '{topic}'. "
-        "Вопросы должны быть на русском языке, не слишком сложные и не слишком простые. "
-        "Ответы должны быть в формате JSON-массива, где каждый объект имеет поля: "
-        "question (строка), options (массив из 4 строк), answer (индекс правильного ответа, начиная с 0). "
-        "Выведи только JSON, без лишнего текста."
-    )
-    response = await ask_ai(prompt, "gemini")  # используем Gemini
-    # Пытаемся извлечь JSON из ответа
-    try:
-        # Ищем блок с JSON (массив)
-        match = re.search(r'\[.*\]', response, re.DOTALL)
-        if match:
-            questions = json.loads(match.group())
-            # Проверяем структуру
-            if isinstance(questions, list) and len(questions) > 0:
-                # Убедимся, что есть все поля
-                for q in questions:
-                    if not all(k in q for k in ("question", "options", "answer")):
-                        return []
-                return questions
-        return []
-    except Exception as e:
-        print(f"Ошибка парсинга JSON: {e}")
-        return []
