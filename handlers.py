@@ -484,7 +484,6 @@ async def contact_send(message: Message, state: FSMContext):
     username = message.from_user.username or "без username"
     text = message.text
 
-    # Сохраняем данные для ответа
     admin_text = (
         f"📩 *Сообщение от пользователя*\n"
         f"ID: `{user_id}`\n"
@@ -492,7 +491,6 @@ async def contact_send(message: Message, state: FSMContext):
         f"Сообщение:\n{text}"
     )
 
-    # Создаём кнопку "Ответить"
     reply_button = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✏️ Ответить", callback_data=f"reply_{user_id}")]
     ])
@@ -530,6 +528,41 @@ async def send_reply(message: Message, state: FSMContext):
         return
 
     reply_text = message.text
+    try:
+        await message.bot.send_message(
+            chat_id=user_id,
+            text=f"📩 *Ответ администратора:*\n{reply_text}",
+            parse_mode="Markdown"
+        )
+        await message.answer(f"✅ Ответ отправлен пользователю {user_id}.")
+    except Exception as e:
+        await message.answer(f"❌ Ошибка: {e}. Возможно, пользователь не начал чат с ботом.")
+    await state.clear()
+
+# ---- ОТВЕТ АДМИНА ПО КОМАНДЕ /reply (для обратной совместимости) ----
+@router.message(Command("reply"))
+async def reply_command(message: Message, state: FSMContext):
+    if message.from_user.id != ADMIN_ID:
+        await message.answer("⛔ У вас нет прав на эту команду.")
+        return
+
+    args = message.text.split(maxsplit=2)
+    if len(args) < 3:
+        await message.answer(
+            "❗ Используйте: /reply <user_id> <текст ответа>\n"
+            "Например: /reply 123456789 Привет, это ответ!"
+        )
+        return
+
+    user_id_str = args[1]
+    reply_text = args[2]
+
+    try:
+        user_id = int(user_id_str)
+    except ValueError:
+        await message.answer("❌ ID пользователя должен быть числом.")
+        return
+
     try:
         await message.bot.send_message(
             chat_id=user_id,
@@ -867,4 +900,4 @@ async def games_button(message: Message):
         "🃏 `/blackjack` – Блек-джек (21)\n"
         "❓ `/quiz` – Викторина",
         parse_mode="Markdown"
-    )
+            )
