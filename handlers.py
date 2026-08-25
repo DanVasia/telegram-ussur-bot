@@ -20,16 +20,14 @@ from keyboards import (
     anonymous_choice_keyboard, main_menu
 )
 from video_maker import make_short_video
-from weather import get_weather, get_weather_data
-from weather_image import create_weather_card
+from weather import get_weather
 from database import get_db
 from games import (
     play_rps, roll_dice, flip_coin, spin_wheel,
     deal_card, hand_value, format_hand, blackjack_result,
     get_blackjack_state, get_quiz_categories, get_random_questions,
-    format_question, generate_quiz_questions_via_gemini
+    format_question
 )
-from ai_chat import ask_ai
 
 router = Router()
 
@@ -504,14 +502,9 @@ async def contact_send(message: Message, state: FSMContext):
 async def contact_unknown(message: Message, state: FSMContext):
     await message.answer("Пожалуйста, отправьте текстовое сообщение.")
 
-# ---- ПОГОДА (текст) ----
+# ---- ПОГОДА (команда и кнопка) ----
 @router.message(Command("weather"))
 async def weather_command(message: Message):
-    weather_text = await get_weather()
-    await message.answer(weather_text, parse_mode="Markdown")
-
-@router.message(F.text == "🌤 Погода")
-async def weather_button(message: Message):
     weather_text = await get_weather()
     await message.answer(weather_text, parse_mode="Markdown")
 
@@ -575,13 +568,6 @@ async def receive_comment_text(message: Message, state: FSMContext):
 # ---- FAQ ----
 @router.message(Command("faq"))
 async def faq_command(message: Message):
-    await message.answer(
-        "❓ Выберите интересующий вас вопрос:",
-        reply_markup=get_faq_keyboard()
-    )
-
-@router.message(F.text == "❓ Частые вопросы")
-async def faq_button(message: Message):
     await message.answer(
         "❓ Выберите интересующий вас вопрос:",
         reply_markup=get_faq_keyboard()
@@ -700,7 +686,7 @@ async def blackjack_action(message: Message, state: FSMContext):
 async def blackjack_invalid(message: Message):
     await message.answer("Пожалуйста, введите 'взять' или 'стоп'.")
 
-# -------- 6. ВИКТОРИНА (ОБНОВЛЁННАЯ) --------
+# -------- 6. ВИКТОРИНА --------
 @router.message(Command("quiz"))
 async def quiz_start(message: Message, state: FSMContext):
     categories = get_quiz_categories()
@@ -715,33 +701,17 @@ async def quiz_start(message: Message, state: FSMContext):
     for cat in categories:
         buttons.append([InlineKeyboardButton(text=cat, callback_data=f"qcat_{cat}")])
     buttons.append([InlineKeyboardButton(text="📌 Любая", callback_data="qcat_any")])
-    buttons.append([InlineKeyboardButton(text="🤖 Сгенерировать ИИ", callback_data="qcat_ai")])
     await message.answer(
-        "Выберите категорию или сгенерируйте вопросы через ИИ:",
+        "Выберите категорию:",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
     )
 
 @router.callback_query(QuizSetupState.choosing_category, F.data.startswith("qcat_"))
 async def quiz_category_chosen(callback: CallbackQuery, state: FSMContext):
     cat = callback.data.split("_")[1]
-    if cat == "ai":
-        await state.update_data(category="ai")
-        await state.set_state(QuizSetupState.choosing_difficulty)
-        difficulty_buttons = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🟢 Лёгкая", callback_data="qdiff_easy"),
-             InlineKeyboardButton(text="🟡 Средняя", callback_data="qdiff_medium")],
-            [InlineKeyboardButton(text="🔴 Сложная", callback_data="qdiff_hard"),
-             InlineKeyboardButton(text="📌 Любая", callback_data="qdiff_any")]
-        ])
-        await callback.message.edit_text(
-            "Выберите сложность (влияет на тему вопросов):",
-            reply_markup=difficulty_buttons
-        )
-        await callback.answer()
-        return
-
     await state.update_data(category=cat if cat != "any" else None)
     await state.set_state(QuizSetupState.choosing_difficulty)
+
     difficulty_buttons = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🟢 Лёгкая", callback_data="qdiff_easy"),
          InlineKeyboardButton(text="🟡 Средняя", callback_data="qdiff_medium")],
@@ -755,16 +725,8 @@ async def quiz_category_chosen(callback: CallbackQuery, state: FSMContext):
 async def quiz_difficulty_chosen(callback: CallbackQuery, state: FSMContext):
     diff = callback.data.split("_")[1]
     await state.update_data(difficulty=diff)
-    data = await state.get_data()
-    if data.get("category") == "ai":
-        await state.set_state(QuizSetupState.waiting_for_topic)
-        await callback.message.edit_text(
-            "✍️ Напишите тему для вопросов (например, «Уссурийск», «Космос», «Кино»)."
-        )
-        await callback.answer()
-        return
-
     await state.set_state(QuizSetupState.choosing_mode)
+
     mode_buttons = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="5 вопросов", callback_data="qmode_5"),
          InlineKeyboardButton(text="10 вопросов", callback_data="qmode_10")],
@@ -773,42 +735,18 @@ async def quiz_difficulty_chosen(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text("Сколько вопросов хотите получить?", reply_markup=mode_buttons)
     await callback.answer()
 
-@router.message(StateFilter(QuizSetupState.waiting_for_topic), F.text)
-async def quiz_topic_received(message: Message, state: FSMContext):
-    topic = message.text.strip()
-    if not topic:
-        await message.answer("❌ Тема не может быть пустой. Попробуйте ещё раз.")
-        return
-    await state.update_data(topic=topic)
-    await state.set_state(QuizSetupState.choosing_mode)
-    mode_buttons = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="5 вопросов", callback_data="qmode_5"),
-         InlineKeyboardButton(text="10 вопросов", callback_data="qmode_10")],
-        [InlineKeyboardButton(text="15 вопросов", callback_data="qmode_15")]
-    ])
-    await message.answer("Сколько вопросов хотите получить?", reply_markup=mode_buttons)
-
 @router.callback_query(QuizSetupState.choosing_mode, F.data.startswith("qmode_"))
 async def quiz_mode_chosen(callback: CallbackQuery, state: FSMContext):
     amount = int(callback.data.split("_")[1])
     data = await state.get_data()
     category = data.get("category")
     difficulty = data.get("difficulty")
-    topic = data.get("topic")
 
-    if category == "ai":
-        await callback.message.edit_text("⏳ Генерирую вопросы с помощью ИИ...")
-        questions = await generate_quiz_questions_via_gemini(topic or "общие знания", amount)
-        if not questions:
-            await callback.message.edit_text("❌ Не удалось сгенерировать вопросы. Попробуйте другую тему или позже.")
-            await state.clear()
-            return
-    else:
-        questions = get_random_questions(amount=amount, category=category, difficulty=difficulty)
-        if not questions:
-            await callback.message.edit_text("❌ Нет вопросов с такими параметрами.")
-            await state.clear()
-            return
+    questions = get_random_questions(amount=amount, category=category, difficulty=difficulty)
+    if not questions:
+        await callback.message.edit_text("❌ Нет вопросов с такими параметрами. Попробуйте другие настройки.")
+        await state.clear()
+        return
 
     await state.update_data(quiz_questions=questions, quiz_index=0, quiz_score=0)
     await state.set_state(QuizState.waiting_for_answer)
@@ -858,31 +796,29 @@ async def quiz_answer(message: Message, state: FSMContext):
         await message.answer(f"🎉 Викторина завершена! Ваш счёт: {score} из {len(questions)}.")
         await state.clear()
 
-# ---- ИИ-ЧАТ (DeepSeek) ----
-@router.message(Command("ai"))
-async def ai_deepseek(message: Message):
-    prompt = message.text.replace("/ai", "").strip()
-    if not prompt:
-        await message.answer("❓ Напишите вопрос после команды /ai\nПример: `/ai Какой сегодня день?`")
-        return
-    await message.answer("🤔 Думаю через DeepSeek...")
-    response = await ask_ai(prompt, "deepseek")
-    await message.answer(response, parse_mode="Markdown")
+# ---- КНОПКИ МЕНЮ (ReplyKeyboard) ----
+@router.message(F.text == "📝 Предложить новость")
+async def propose_news_button(message: Message, state: FSMContext):
+    await news_command(message, state)
 
-# ---- ИИ-ЧАТ (Gemini) ----
-@router.message(Command("gemini"))
-async def ai_gemini(message: Message):
-    prompt = message.text.replace("/gemini", "").strip()
-    if not prompt:
-        await message.answer("❓ Напишите вопрос после команды /gemini\nПример: `/gemini Какой сегодня день?`")
-        return
-    await message.answer("🤔 Думаю через Gemini...")
-    response = await ask_ai(prompt, "gemini")
-    await message.answer(response, parse_mode="Markdown")
+@router.message(F.text == "🌤 Погода")
+async def weather_button(message: Message):
+    weather_text = await get_weather()
+    await message.answer(weather_text, parse_mode="Markdown")
 
-# ---- КНОПКИ МЕНЮ: ИГРЫ И ИИ ----
+@router.message(F.text == "📩 Связаться с админом")
+async def contact_button(message: Message, state: FSMContext):
+    await contact_start(message, state)
+
+@router.message(F.text == "❓ Частые вопросы")
+async def faq_button(message: Message):
+    await message.answer(
+        "❓ Выберите интересующий вас вопрос:",
+        reply_markup=get_faq_keyboard()
+    )
+
 @router.message(F.text == "🎲 Игры")
-async def games_menu(message: Message):
+async def games_button(message: Message):
     await message.answer(
         "🎮 *Доступные игры:*\n\n"
         "✊ `/rps` – Камень-ножницы-бумага\n"
@@ -890,17 +826,6 @@ async def games_menu(message: Message):
         "🪙 `/coin` – Орёл или решка\n"
         "🎡 `/spin вариант1, вариант2, ...` – Колесо фортуны\n"
         "🃏 `/blackjack` – Блек-джек (21)\n"
-        "❓ `/quiz` – Викторина с выбором категории и генерацией ИИ",
+        "❓ `/quiz` – Викторина",
         parse_mode="Markdown"
-    )
-
-@router.message(F.text == "🤖 ИИ-чат")
-async def ai_menu(message: Message):
-    await message.answer(
-        "🤖 *ИИ-помощник*\n\n"
-        "Используйте команды:\n"
-        "`/ai вопрос` – спросить DeepSeek\n"
-        "`/gemini вопрос` – спросить Gemini\n\n"
-        "Пример: `/ai Что такое Уссурийск?`",
-        parse_mode="Markdown"
-    )
+)
