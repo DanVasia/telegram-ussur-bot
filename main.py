@@ -36,9 +36,7 @@ async def start_bot():
         types.BotCommand(command="coin", description="🪙 Орёл или решка"),
         types.BotCommand(command="spin", description="🎡 Колесо фортуны"),
         types.BotCommand(command="blackjack", description="🃏 Блек-джек (21)"),
-        types.BotCommand(command="quiz", description="❓ Викторина"),
-        types.BotCommand(command="ai", description="🤖 Спросить DeepSeek"),
-        types.BotCommand(command="gemini", description="🧠 Спросить Gemini")
+        types.BotCommand(command="quiz", description="❓ Викторина")
     ])
     logging.info("Commands set")
 
@@ -65,7 +63,9 @@ async def main():
     await site.start()
     logging.info("Health check server running on port 10000")
 
+    # ЗАПУСК ПЛАНИРОВЩИКА ПОГОДЫ
     scheduler = setup_scheduler(bot)
+    logging.info("Scheduler started")
 
     await start_bot()
 
