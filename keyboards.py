@@ -48,3 +48,23 @@ anonymous_choice_keyboard = InlineKeyboardMarkup(
         ]
     ]
 )
+
+# ---- КЛАВИАТУРЫ ДЛЯ ВОРДЛИ ----
+wordle_length_keyboard = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="🔤 5 букв", callback_data="wordle_len_5")],
+        [InlineKeyboardButton(text="🔤 6 букв", callback_data="wordle_len_6")]
+    ]
+)
+
+wordle_difficulty_keyboard = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [
+            InlineKeyboardButton(text="🟢 Лёгкий", callback_data="wordle_diff_easy"),
+            InlineKeyboardButton(text="🟡 Средний", callback_data="wordle_diff_medium")
+        ],
+        [
+            InlineKeyboardButton(text="🔴 Сложный", callback_data="wordle_diff_hard")
+        ]
+    ]
+)
