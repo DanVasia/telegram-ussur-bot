@@ -38,7 +38,6 @@ def init_db():
         ''')
         conn.commit()
 
-# ---- ФУНКЦИИ ДЛЯ СТАТИСТИКИ ----
 def get_user_stats(user_id):
     with get_db() as conn:
         cur = conn.execute("SELECT * FROM user_stats WHERE user_id = ?", (user_id,))
@@ -46,11 +45,7 @@ def get_user_stats(user_id):
         if row:
             return dict(row)
         else:
-            # Создаём запись по умолчанию
-            conn.execute(
-                "INSERT INTO user_stats (user_id) VALUES (?)",
-                (user_id,)
-            )
+            conn.execute("INSERT INTO user_stats (user_id) VALUES (?)", (user_id,))
             conn.commit()
             return {
                 "user_id": user_id,
@@ -73,7 +68,6 @@ def update_wordle_stats(user_id, won, guesses):
         stats["wordle_streak"] += 1
         if stats["wordle_streak"] > stats["wordle_max_streak"]:
             stats["wordle_max_streak"] = stats["wordle_streak"]
-        # Обновляем распределение попыток
         guesses_dict = json.loads(stats["wordle_guesses"])
         guesses_dict[str(guesses)] = guesses_dict.get(str(guesses), 0) + 1
         stats["wordle_guesses"] = json.dumps(guesses_dict)
