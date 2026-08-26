@@ -1,6 +1,7 @@
 import os
 import logging
 import tempfile
+import random
 from aiogram import Router, F
 from aiogram.types import (
     Message, CallbackQuery,
@@ -10,24 +11,26 @@ from aiogram.types import (
 )
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
 from states import (
     NewsForm, AdminEdit, ContactForm,
     CommentState, BlackjackState, QuizState, QuizSetupState,
-    SpinState, AdminReplyState
+    SpinState, AdminReplyState, WordleSetupState, WordleGameState
 )
 from keyboards import (
     skip_keyboard, anonymous_keyboard, admin_keyboard,
-    anonymous_choice_keyboard, main_menu
+    anonymous_choice_keyboard, main_menu,
+    wordle_length_keyboard, wordle_difficulty_keyboard
 )
 from video_maker import make_short_video
-from weather import get_weather
-from database import get_db
+from weather import get_weather, get_weather_data
+from database import get_db, get_user_stats, update_wordle_stats, update_quiz_stats
 from games import (
     play_rps, roll_dice, flip_coin, spin_wheel,
     deal_card, hand_value, format_hand, blackjack_result,
     get_blackjack_state, get_quiz_categories, get_random_questions,
-    format_question
+    format_question, get_wordle_word
 )
 
 router = Router()
@@ -469,7 +472,7 @@ async def receive_new_text(message: Message, state: FSMContext):
     await message.answer("✅ Текст обновлён.")
     await state.clear()
 
-# ---- КОНТАКТ (с кнопкой "Ответить" для админа) ----
+# ---- КОНТАКТ (с кнопкой "Ответить") ----
 @router.message(Command("contact"))
 async def contact_start(message: Message, state: FSMContext):
     await state.set_state(ContactForm.waiting_for_message)
@@ -539,7 +542,7 @@ async def send_reply(message: Message, state: FSMContext):
         await message.answer(f"❌ Ошибка: {e}. Возможно, пользователь не начал чат с ботом.")
     await state.clear()
 
-# ---- ОТВЕТ АДМИНА ПО КОМАНДЕ /reply (для обратной совместимости) ----
+# ---- КОМАНДА /reply (для обратной совместимости) ----
 @router.message(Command("reply"))
 async def reply_command(message: Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
@@ -574,11 +577,29 @@ async def reply_command(message: Message, state: FSMContext):
         await message.answer(f"❌ Ошибка: {e}. Возможно, пользователь не начал чат с ботом.")
     await state.clear()
 
-# ---- ПОГОДА (команда и кнопка) ----
+# ---- ПОГОДА (команда /weather и кнопка) ----
 @router.message(Command("weather"))
 async def weather_command(message: Message):
     weather_text = await get_weather()
     await message.answer(weather_text, parse_mode="Markdown")
+
+@router.message(F.text == "🌤 Погода")
+async def weather_button(message: Message):
+    weather_text = await get_weather()
+    await message.answer(weather_text, parse_mode="Markdown")
+
+# ---- ТЕСТОВАЯ ОТПРАВКА ПОГОДЫ В КАНАЛ (ТОЛЬКО АДМИН) ----
+@router.message(Command("send_weather"))
+async def send_weather_now(message: Message):
+    if message.from_user.id != ADMIN_ID:
+        await message.answer("⛔ У вас нет прав.")
+        return
+    from scheduler import send_weather_card
+    try:
+        await send_weather_card(message.bot)
+        await message.answer("✅ Погода отправлена в канал (если CHANNEL_ID настроен).")
+    except Exception as e:
+        await message.answer(f"❌ Ошибка: {e}")
 
 # ---- КОММЕНТАРИИ ----
 @router.callback_query(F.data.startswith("comment_"))
@@ -652,113 +673,7 @@ async def faq_callback(callback: CallbackQuery):
     await callback.message.answer(f"📌 *{question}*\n\n{answer}", parse_mode="Markdown")
     await callback.answer()
 
-# ---- ИГРЫ ----
-
-# -------- 1. КАМЕНЬ-НОЖНИЦЫ-БУМАГА --------
-@router.message(Command("rps"))
-async def rps_command(message: Message):
-    await message.answer(
-        "✊ Камень, ножницы, бумага!\n"
-        "Напишите: `камень`, `ножницы` или `бумага`."
-    )
-
-@router.message(F.text.lower().in_(["камень", "ножницы", "бумага"]))
-async def rps_play(message: Message):
-    result = play_rps(message.text)
-    await message.answer(result)
-
-# -------- 2. КУБИК --------
-@router.message(Command("dice"))
-async def dice_command(message: Message):
-    args = message.text.split()
-    count = 1
-    if len(args) > 1:
-        try:
-            count = int(args[1])
-        except:
-            pass
-    result = roll_dice(count)
-    await message.answer(result)
-
-# -------- 3. ОРЁЛ ИЛИ РЕШКА --------
-@router.message(Command("coin"))
-async def coin_command(message: Message):
-    result = flip_coin()
-    await message.answer(result, parse_mode="Markdown")
-
-# -------- 4. КОЛЕСО ФОРТУНЫ (исправленное) --------
-@router.message(Command("spin"))
-async def spin_command(message: Message, state: FSMContext):
-    args = message.text.replace("/spin", "").strip()
-    if args:
-        result = spin_wheel(args)
-        await message.answer(result, parse_mode="Markdown")
-    else:
-        await state.set_state(SpinState.waiting_for_items)
-        await message.answer(
-            "🎡 Введите варианты через запятую.\n"
-            "Например: `Китай, Япония, Корея`",
-            parse_mode="Markdown"
-        )
-
-@router.message(StateFilter(SpinState.waiting_for_items), F.text)
-async def spin_items_received(message: Message, state: FSMContext):
-    items = message.text
-    result = spin_wheel(items)
-    await message.answer(result, parse_mode="Markdown")
-    await state.clear()
-
-# -------- 5. БЛЕК-ДЖЕК (21) --------
-@router.message(Command("blackjack"))
-async def blackjack_start(message: Message, state: FSMContext):
-    player_hand = [deal_card(), deal_card()]
-    dealer_hand = [deal_card(), deal_card()]
-    await state.update_data(player_hand=player_hand, dealer_hand=dealer_hand, game_over=False)
-    await state.set_state(BlackjackState.waiting_for_action)
-    state_text = get_blackjack_state(player_hand, dealer_hand, game_over=False)
-    await message.answer(state_text)
-
-@router.message(BlackjackState.waiting_for_action, F.text.lower().in_(["взять", "стоп"]))
-async def blackjack_action(message: Message, state: FSMContext):
-    data = await state.get_data()
-    player_hand = data.get("player_hand", [])
-    dealer_hand = data.get("dealer_hand", [])
-    game_over = data.get("game_over", False)
-
-    if game_over:
-        await message.answer("Игра уже завершена. Начните новую командой /blackjack.")
-        return
-
-    action = message.text.lower()
-
-    if action == "взять":
-        player_hand.append(deal_card())
-        if hand_value(player_hand) > 21:
-            game_over = True
-            state_text = get_blackjack_state(player_hand, dealer_hand, game_over=True)
-            await message.answer(state_text)
-            await state.clear()
-            return
-        else:
-            state_text = get_blackjack_state(player_hand, dealer_hand, game_over=False)
-            await message.answer(state_text)
-
-    elif action == "стоп":
-        while hand_value(dealer_hand) < 17:
-            dealer_hand.append(deal_card())
-        game_over = True
-        state_text = get_blackjack_state(player_hand, dealer_hand, game_over=True)
-        await message.answer(state_text)
-        await state.clear()
-        return
-
-    await state.update_data(player_hand=player_hand, dealer_hand=dealer_hand, game_over=game_over)
-
-@router.message(BlackjackState.waiting_for_action)
-async def blackjack_invalid(message: Message):
-    await message.answer("Пожалуйста, введите 'взять' или 'стоп'.")
-
-# -------- 6. ВИКТОРИНА --------
+# ---- ВИКТОРИНА (без сложности, с сообщением об обновлении) ----
 @router.message(Command("quiz"))
 async def quiz_start(message: Message, state: FSMContext):
     categories = get_quiz_categories()
@@ -773,30 +688,20 @@ async def quiz_start(message: Message, state: FSMContext):
     for cat in categories:
         buttons.append([InlineKeyboardButton(text=cat, callback_data=f"qcat_{cat}")])
     buttons.append([InlineKeyboardButton(text="📌 Любая", callback_data="qcat_any")])
+
     await message.answer(
+        "📚 *Викторина*\n\n"
+        "Вопросы обновляются раз в неделю! Следите за новыми вопросами.\n\n"
         "Выберите категорию:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
+        parse_mode="Markdown"
     )
 
 @router.callback_query(QuizSetupState.choosing_category, F.data.startswith("qcat_"))
 async def quiz_category_chosen(callback: CallbackQuery, state: FSMContext):
     cat = callback.data.split("_")[1]
-    await state.update_data(category=cat if cat != "any" else None)
-    await state.set_state(QuizSetupState.choosing_difficulty)
-
-    difficulty_buttons = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🟢 Лёгкая", callback_data="qdiff_easy"),
-         InlineKeyboardButton(text="🟡 Средняя", callback_data="qdiff_medium")],
-        [InlineKeyboardButton(text="🔴 Сложная", callback_data="qdiff_hard"),
-         InlineKeyboardButton(text="📌 Любая", callback_data="qdiff_any")]
-    ])
-    await callback.message.edit_text("Выберите сложность:", reply_markup=difficulty_buttons)
-    await callback.answer()
-
-@router.callback_query(QuizSetupState.choosing_difficulty, F.data.startswith("qdiff_"))
-async def quiz_difficulty_chosen(callback: CallbackQuery, state: FSMContext):
-    diff = callback.data.split("_")[1]
-    await state.update_data(difficulty=diff)
+    category = cat if cat != "any" else None
+    await state.update_data(category=category)
     await state.set_state(QuizSetupState.choosing_mode)
 
     mode_buttons = InlineKeyboardMarkup(inline_keyboard=[
@@ -812,9 +717,8 @@ async def quiz_mode_chosen(callback: CallbackQuery, state: FSMContext):
     amount = int(callback.data.split("_")[1])
     data = await state.get_data()
     category = data.get("category")
-    difficulty = data.get("difficulty")
 
-    questions = get_random_questions(amount=amount, category=category, difficulty=difficulty)
+    questions = get_random_questions(amount=amount, category=category)
     if not questions:
         await callback.message.edit_text("❌ Нет вопросов с такими параметрами. Попробуйте другие настройки.")
         await state.clear()
@@ -865,10 +769,170 @@ async def quiz_answer(message: Message, state: FSMContext):
         q_text, _ = format_question(questions[next_index])
         await message.answer(q_text)
     else:
+        # Викторина завершена – обновляем статистику
+        user_id = message.from_user.id
+        update_quiz_stats(user_id, score, len(questions))
         await message.answer(f"🎉 Викторина завершена! Ваш счёт: {score} из {len(questions)}.")
         await state.clear()
 
-# ---- КНОПКИ МЕНЮ (ReplyKeyboard) ----
+# ---- ВОРДЛИ ----
+@router.message(Command("wordle"))
+async def wordle_start(message: Message, state: FSMContext):
+    await state.set_state(WordleSetupState.choosing_length)
+    await message.answer(
+        "🎮 *Вордли*\n\n"
+        "Выберите длину слова:",
+        reply_markup=wordle_length_keyboard,
+        parse_mode="Markdown"
+    )
+
+@router.callback_query(WordleSetupState.choosing_length, F.data.startswith("wordle_len_"))
+async def wordle_choose_length(callback: CallbackQuery, state: FSMContext):
+    length = int(callback.data.split("_")[2])
+    await state.update_data(wordle_length=length)
+    await state.set_state(WordleSetupState.choosing_difficulty)
+    await callback.message.edit_text(
+        "Выберите уровень сложности:",
+        reply_markup=wordle_difficulty_keyboard
+    )
+    await callback.answer()
+
+@router.callback_query(WordleSetupState.choosing_difficulty, F.data.startswith("wordle_diff_"))
+async def wordle_choose_difficulty(callback: CallbackQuery, state: FSMContext):
+    difficulty = callback.data.split("_")[2]
+    data = await state.get_data()
+    length = data.get("wordle_length")
+    word = get_wordle_word(length, difficulty)
+    if not word:
+        await callback.message.edit_text("❌ Нет слов для выбранных параметров. Попробуйте другие настройки.")
+        await state.clear()
+        return
+
+    await state.update_data(
+        wordle_word=word,
+        wordle_tries=0,
+        wordle_guesses=[],
+        wordle_max_tries=6
+    )
+    await state.set_state(WordleGameState.playing)
+    await callback.message.edit_text(
+        f"🎯 Я загадал слово из {length} букв.\n"
+        f"У вас есть 6 попыток.\n"
+        f"Введите слово (все буквы строчные, русские):"
+    )
+    await callback.answer()
+
+@router.message(WordleGameState.playing, F.text)
+async def wordle_guess(message: Message, state: FSMContext):
+    data = await state.get_data()
+    word = data.get("wordle_word")
+    tries = data.get("wordle_tries", 0)
+    max_tries = data.get("wordle_max_tries", 6)
+    guesses = data.get("wordle_guesses", [])
+
+    guess = message.text.strip().lower()
+    if len(guess) != len(word):
+        await message.answer(f"❌ Слово должно состоять из {len(word)} букв. Попробуйте ещё раз.")
+        return
+
+    # Проверяем, что только русские буквы
+    if not guess.isalpha():
+        await message.answer("❌ Вводите только буквы (русские).")
+        return
+
+    tries += 1
+    guesses.append(guess)
+
+    # Формируем подсказки
+    result = []
+    word_list = list(word)
+    guess_list = list(guess)
+    # Сначала ищем точные совпадения
+    for i, (g, w) in enumerate(zip(guess_list, word_list)):
+        if g == w:
+            result.append("🟩")
+            word_list[i] = None  # помечаем использованную букву
+        else:
+            result.append(None)
+
+    # Затем ищем буквы, которые есть, но не на месте
+    for i, g in enumerate(guess_list):
+        if result[i] is None:
+            if g in word_list:
+                result[i] = "🟨"
+                word_list[word_list.index(g)] = None
+            else:
+                result[i] = "⬜"
+
+    feedback = "".join(result)
+
+    # Отправляем результат
+    await message.answer(
+        f"Попытка {tries}/{max_tries}\n"
+        f"{guess}\n"
+        f"{feedback}"
+    )
+
+    # Проверяем, угадал ли
+    if guess == word:
+        # Победа!
+        update_wordle_stats(message.from_user.id, won=True, guesses=tries)
+        await message.answer(f"🎉 Поздравляю! Вы угадали слово **{word}** за {tries} попыток!")
+        await state.clear()
+        return
+
+    if tries >= max_tries:
+        # Проигрыш
+        update_wordle_stats(message.from_user.id, won=False, guesses=0)
+        await message.answer(f"😔 Попытки закончились. Загаданное слово: **{word}**.")
+        await state.clear()
+        return
+
+    # Сохраняем состояние
+    await state.update_data(wordle_tries=tries, wordle_guesses=guesses)
+
+# ---- СТАТИСТИКА ----
+@router.message(Command("stats"))
+async def stats_command(message: Message):
+    user_id = message.from_user.id
+    stats = get_user_stats(user_id)
+
+    # Wordle
+    wordle_games = stats["wordle_games"]
+    wordle_wins = stats["wordle_wins"]
+    wordle_streak = stats["wordle_streak"]
+    wordle_max_streak = stats["wordle_max_streak"]
+    guesses_dict = eval(stats["wordle_guesses"])
+
+    wordle_lines = [
+        f"🎮 *Вордли*",
+        f"Игр: {wordle_games}",
+        f"Побед: {wordle_wins}",
+        f"Текущая серия: {wordle_streak}",
+        f"Макс. серия: {wordle_max_streak}",
+        "Распределение попыток:"
+    ]
+    for i in range(1, 7):
+        wordle_lines.append(f"  {i} попытка: {guesses_dict.get(str(i), 0)}")
+
+    # Викторина
+    quiz_games = stats["quiz_games"]
+    quiz_correct = stats["quiz_correct"]
+    quiz_total = stats["quiz_total"]
+    quiz_best = stats["quiz_best"]
+    quiz_percent = round((quiz_correct / quiz_total * 100) if quiz_total else 0, 1)
+
+    quiz_lines = [
+        f"❓ *Викторина*",
+        f"Игр: {quiz_games}",
+        f"Правильных ответов: {quiz_correct} из {quiz_total} ({quiz_percent}%)",
+        f"Лучший результат: {quiz_best}"
+    ]
+
+    text = "📊 *Ваша статистика*\n\n" + "\n".join(wordle_lines) + "\n\n" + "\n".join(quiz_lines)
+    await message.answer(text, parse_mode="Markdown")
+
+# ---- КНОПКИ МЕНЮ ----
 @router.message(F.text == "📝 Предложить новость")
 async def propose_news_button(message: Message, state: FSMContext):
     await news_command(message, state)
@@ -898,6 +962,8 @@ async def games_button(message: Message):
         "🪙 `/coin` – Орёл или решка\n"
         "🎡 `/spin вариант1, вариант2, ...` – Колесо фортуны\n"
         "🃏 `/blackjack` – Блек-джек (21)\n"
-        "❓ `/quiz` – Викторина",
+        "❓ `/quiz` – Викторина\n"
+        "🟩 `/wordle` – Вордли (угадай слово)\n"
+        "📊 `/stats` – Статистика",
         parse_mode="Markdown"
-            )
+    )
