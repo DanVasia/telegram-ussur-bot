@@ -25,12 +25,18 @@ class QuizState(StatesGroup):
 
 class QuizSetupState(StatesGroup):
     choosing_category = State()
-    choosing_difficulty = State()
-    choosing_mode = State()
+    choosing_mode = State()  # только количество вопросов
 
 class SpinState(StatesGroup):
     waiting_for_items = State()
 
-# ---- ДЛЯ ОТВЕТА АДМИНА ЧЕРЕЗ КНОПКУ "Ответить" ----
 class AdminReplyState(StatesGroup):
     waiting_for_reply_text = State()
+
+# ---- ДЛЯ ВОРДЛИ ----
+class WordleSetupState(StatesGroup):
+    choosing_length = State()
+    choosing_difficulty = State()
+
+class WordleGameState(StatesGroup):
+    playing = State()
