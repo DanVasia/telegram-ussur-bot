@@ -3,6 +3,7 @@ import logging
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from aiogram import Bot
+from aiogram.types import BufferedInputFile
 from weather import get_weather_data
 from weather_image import create_weather_card
 
@@ -17,6 +18,7 @@ async def send_weather_card(bot: Bot):
         return
 
     image_bytes = await create_weather_card(data)
+    photo = BufferedInputFile(image_bytes, filename="weather.png")
 
     caption = (
         f"🌤 *Погода в Уссурийске*\n"
@@ -29,7 +31,7 @@ async def send_weather_card(bot: Bot):
 
     await bot.send_photo(
         chat_id=CHANNEL_ID,
-        photo=image_bytes,
+        photo=photo,
         caption=caption,
         parse_mode="Markdown"
     )
@@ -50,5 +52,5 @@ def setup_scheduler(bot: Bot):
         id="weather_9pm"
     )
     scheduler.start()
-    logging.info("Scheduler started – weather cards at 7:00 and 21:00 (UTC+10)")
+    logging.info("Scheduler started – weather at 7:00 and 21:00 (UTC+10)")
     return scheduler
