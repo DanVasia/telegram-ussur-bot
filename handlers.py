@@ -11,7 +11,7 @@ from aiogram.types import (
 )
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import BufferedInputFile
 
 from states import (
     NewsForm, AdminEdit, ContactForm,
@@ -25,6 +25,7 @@ from keyboards import (
 )
 from video_maker import make_short_video
 from weather import get_weather, get_weather_data
+from weather_image import create_weather_card
 from database import get_db, get_user_stats, update_wordle_stats, update_quiz_stats
 from games import (
     play_rps, roll_dice, flip_coin, spin_wheel,
@@ -597,9 +598,18 @@ async def send_weather_now(message: Message):
     from scheduler import send_weather_card
     try:
         await send_weather_card(message.bot)
-        await message.answer("✅ Погода отправлена в канал (если CHANNEL_ID настроен).")
+        await message.answer("✅ Погода отправлена в канал.")
     except Exception as e:
         await message.answer(f"❌ Ошибка: {e}")
+
+# ---- ОТПРАВКА ПОГОДЫ АДМИНУ В ЛИЧКУ (ТОЛЬКО АДМИН) ----
+@router.message(Command("weather_admin"))
+async def weather_admin(message: Message):
+    if message.from_user.id != ADMIN_ID:
+        await message.answer("⛔ У вас нет прав.")
+        return
+    weather_text = await get_weather()
+    await message.answer(weather_text, parse_mode="Markdown")
 
 # ---- КОММЕНТАРИИ ----
 @router.callback_query(F.data.startswith("comment_"))
@@ -769,7 +779,6 @@ async def quiz_answer(message: Message, state: FSMContext):
         q_text, _ = format_question(questions[next_index])
         await message.answer(q_text)
     else:
-        # Викторина завершена – обновляем статистику
         user_id = message.from_user.id
         update_quiz_stats(user_id, score, len(questions))
         await message.answer(f"🎉 Викторина завершена! Ваш счёт: {score} из {len(questions)}.")
@@ -835,7 +844,6 @@ async def wordle_guess(message: Message, state: FSMContext):
         await message.answer(f"❌ Слово должно состоять из {len(word)} букв. Попробуйте ещё раз.")
         return
 
-    # Проверяем, что только русские буквы
     if not guess.isalpha():
         await message.answer("❌ Вводите только буквы (русские).")
         return
@@ -847,15 +855,13 @@ async def wordle_guess(message: Message, state: FSMContext):
     result = []
     word_list = list(word)
     guess_list = list(guess)
-    # Сначала ищем точные совпадения
     for i, (g, w) in enumerate(zip(guess_list, word_list)):
         if g == w:
             result.append("🟩")
-            word_list[i] = None  # помечаем использованную букву
+            word_list[i] = None
         else:
             result.append(None)
 
-    # Затем ищем буквы, которые есть, но не на месте
     for i, g in enumerate(guess_list):
         if result[i] is None:
             if g in word_list:
@@ -866,30 +872,30 @@ async def wordle_guess(message: Message, state: FSMContext):
 
     feedback = "".join(result)
 
-    # Отправляем результат
     await message.answer(
         f"Попытка {tries}/{max_tries}\n"
         f"{guess}\n"
         f"{feedback}"
     )
 
-    # Проверяем, угадал ли
     if guess == word:
-        # Победа!
         update_wordle_stats(message.from_user.id, won=True, guesses=tries)
         await message.answer(f"🎉 Поздравляю! Вы угадали слово **{word}** за {tries} попыток!")
         await state.clear()
         return
 
     if tries >= max_tries:
-        # Проигрыш
         update_wordle_stats(message.from_user.id, won=False, guesses=0)
         await message.answer(f"😔 Попытки закончились. Загаданное слово: **{word}**.")
         await state.clear()
         return
 
-    # Сохраняем состояние
     await state.update_data(wordle_tries=tries, wordle_guesses=guesses)
+
+# ---- КНОПКА "🟩 Вордли" В ГЛАВНОМ МЕНЮ ----
+@router.message(F.text == "🟩 Вордли")
+async def wordle_button(message: Message, state: FSMContext):
+    await wordle_start(message, state)
 
 # ---- СТАТИСТИКА ----
 @router.message(Command("stats"))
@@ -963,7 +969,7 @@ async def games_button(message: Message):
         "🎡 `/spin вариант1, вариант2, ...` – Колесо фортуны\n"
         "🃏 `/blackjack` – Блек-джек (21)\n"
         "❓ `/quiz` – Викторина\n"
-        "🟩 `/wordle` – Вордли (угадай слово)\n"
+        "🟩 `/wordle` – Вордли\n"
         "📊 `/stats` – Статистика",
         parse_mode="Markdown"
     )
