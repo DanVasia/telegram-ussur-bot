@@ -25,7 +25,7 @@ class QuizState(StatesGroup):
 
 class QuizSetupState(StatesGroup):
     choosing_category = State()
-    choosing_mode = State()  # только количество вопросов
+    choosing_mode = State()
 
 class SpinState(StatesGroup):
     waiting_for_items = State()
