@@ -16,6 +16,7 @@ main_menu = ReplyKeyboardMarkup(
         [KeyboardButton(text="📝 Предложить новость")],
         [KeyboardButton(text="🌤 Погода"), KeyboardButton(text="📩 Связаться с админом")],
         [KeyboardButton(text="❓ Частые вопросы"), KeyboardButton(text="🎲 Игры")],
+        [KeyboardButton(text="🟩 Вордли")],
     ],
     resize_keyboard=True
 )
